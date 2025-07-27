@@ -3,8 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Compass, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, Camera, Image as ImageIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Compass, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -133,7 +132,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     
     const handleExport = () => {
         let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-        csvContent += "Project Name,Intersection No,Intersection Name,Phase Index,Direction,Type,Final Time (s),Permissive,Photo URL\r\n";
+        csvContent += "Project Name,Intersection No,Intersection Name,Phase Index,Direction,Type,Final Time (s),Permissive\r\n";
         const dataRows = [];
 
         projects.forEach(project => {
@@ -151,8 +150,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
                                 phase.direction || '',
                                 phase.type || '',
                                 latestTime,
-                                phase.isPermissive ? 'Y' : 'N',
-                                intersection.representativePhoto || ''
+                                phase.isPermissive ? 'Y' : 'N'
                             ].join(',');
                             dataRows.push(row);
                         });
@@ -344,11 +342,12 @@ const PhaseSelectionModal = ({ onSelect, onClose }) => {
 const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId }) => {
     const [details, setDetails] = useState(null);
     const [map, setMap] = useState(null);
-    const [currentLocation, setCurrentLocation] = useState(null);
+    const [mapCenter, setMapCenter] = useState(null); // Separate state for map center to avoid re-rendering map on drag
     const [mapTypeId, setMapTypeId] = useState('roadmap');
     const searchInputRef = useRef(null);
     const mapContainerRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingLocation, setIsSavingLocation] = useState(false); // New state for location saving
     const [phases, setPhases] = useState([]);
     const [isPhaseModalOpen, setIsPhaseModalOpen] = useState(false);
     const [isDirectionModalOpen, setIsDirectionModalOpen] = useState(false);
@@ -361,22 +360,18 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [mapIcons, setMapIcons] = useState({});
     const [memo, setMemo] = useState('');
     const markersRef = useRef({});
+    const mainMarkerRef = useRef(null); // Ref for the main intersection marker
     const [isDirty, setIsDirty] = useState(false);
     const initialData = useRef(null);
-    const [photo, setPhoto] = useState(null);
-    const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef(null);
-    const cameraInputRef = useRef(null);
     const [isLocationVisible, setIsLocationVisible] = useState(true);
-    const [isPhotoVisible, setIsPhotoVisible] = useState(true); // State for photo visibility
 
     const docRef = useMemo(() => doc(db, `/artifacts/${appId}/users/${userId}/projects/${projectId}/intersections`, intersection.id), [db, appId, userId, projectId, intersection.id]);
 
-    const handleSaveAll = useCallback(async () => {
+    const handleSaveAll = async () => {
         setIsSaving(true);
         try {
             const dataToSave = {
-                location: currentLocation,
+                location: mapCenter, // Save the current map center
                 mapIcons: mapIcons,
                 memo: memo,
                 phases: phases,
@@ -384,22 +379,48 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             await updateDoc(docRef, dataToSave);
             
             initialData.current = {
-                location: currentLocation,
+                location: mapCenter,
                 mapIcons: mapIcons,
                 memo: memo,
                 phases: phases,
             };
             setIsDirty(false);
-            showAlert("저장되었습니다.");
+            showAlert("모든 변경사항이 저장되었습니다.");
         } catch (error) {
             console.error("Failed to save data:", error);
             showAlert("저장에 실패했습니다.");
         } finally {
             setIsSaving(false);
         }
-    }, [currentLocation, mapIcons, memo, phases, docRef]);
+    };
 
-    const handleBack = useCallback(() => {
+    // *** NEW FUNCTION: Save only location and icons ***
+    const handleSaveLocation = async () => {
+        if (!map) return;
+        setIsSavingLocation(true);
+        try {
+            const newLocation = map.getCenter().toJSON();
+            await updateDoc(docRef, {
+                location: newLocation,
+                mapIcons: mapIcons,
+            });
+            // Update the local state to match saved data
+            setMapCenter(newLocation); 
+            // Update the initial data snapshot to prevent "isDirty" from being true
+            if(initialData.current) {
+                initialData.current.location = newLocation;
+                initialData.current.mapIcons = mapIcons;
+            }
+            showAlert("교차로 위치와 아이콘이 저장되었습니다.");
+        } catch (error) {
+            console.error("Failed to save location:", error);
+            showAlert("위치 저장에 실패했습니다.");
+        } finally {
+            setIsSavingLocation(false);
+        }
+    };
+
+    const handleBack = () => {
         if (isDirty) {
             showConfirm(
                 "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?",
@@ -410,17 +431,18 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         } else {
             onBack();
         }
-    }, [isDirty, onBack, handleSaveAll]);
+    };
 
     useEffect(() => {
         const unsub = onSnapshot(docRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
                 setDetails(data);
-                if (data.location) setCurrentLocation(data.location);
+                if (data.location) {
+                    setMapCenter(data.location);
+                }
                 setMapIcons(data.mapIcons || {});
                 setMemo(data.memo || '');
-                setPhoto(data.representativePhoto || null);
                 const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array(4).fill({ direction: null, type: null, times: [], isPermissive: false })).map(p => ({
                     direction: p.direction || null,
                     type: p.type || null,
@@ -449,13 +471,13 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     useEffect(() => {
         if (initialData.current) {
-            const locationChanged = JSON.stringify(initialData.current.location) !== JSON.stringify(currentLocation);
+            const locationChanged = JSON.stringify(initialData.current.location) !== JSON.stringify(mapCenter);
             const iconsChanged = JSON.stringify(initialData.current.mapIcons) !== JSON.stringify(mapIcons);
             const memoChanged = initialData.current.memo !== memo;
             const phasesChanged = JSON.stringify(initialData.current.phases) !== JSON.stringify(phases);
             setIsDirty(locationChanged || iconsChanged || memoChanged || phasesChanged);
         }
-    }, [currentLocation, mapIcons, memo, phases]);
+    }, [mapCenter, mapIcons, memo, phases]);
 
     useEffect(() => {
         const handleBeforeUnload = (e) => {
@@ -474,7 +496,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     
         loadGoogleMapsScript(() => {
             if (!mapContainerRef.current) return;
-            const initialCenter = details.location || { lat: 37.5665, lng: 126.9780 };
+            const initialCenter = mapCenter || { lat: 37.5665, lng: 126.9780 };
             const gMap = new window.google.maps.Map(mapContainerRef.current, {
                 center: initialCenter,
                 zoom: 17,
@@ -483,8 +505,19 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             });
             setMap(gMap);
 
-            const mainMarker = new window.google.maps.Marker({ position: initialCenter, map: gMap, draggable: true, zIndex: 10 });
-            mainMarker.addListener('dragend', (e) => setCurrentLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() }));
+            mainMarkerRef.current = new window.google.maps.Marker({ 
+                position: initialCenter, 
+                map: gMap, 
+                draggable: false, // Main marker is not draggable, map center is the source of truth
+                zIndex: 10 
+            });
+
+            gMap.addListener('center_changed', () => {
+                const newCenter = gMap.getCenter();
+                if (mainMarkerRef.current) {
+                    mainMarkerRef.current.setPosition(newCenter);
+                }
+            });
 
             if (searchInputRef.current) {
                 const autocomplete = new window.google.maps.places.Autocomplete(searchInputRef.current);
@@ -492,10 +525,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 autocomplete.addListener('place_changed', () => {
                     const place = autocomplete.getPlace();
                     if (place.geometry && place.geometry.location) {
-                        const newLoc = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+                        const newLoc = place.geometry.location;
                         gMap.setCenter(newLoc);
-                        mainMarker.setPosition(newLoc);
-                        setCurrentLocation(newLoc);
+                        setMapCenter(newLoc.toJSON());
                     }
                 });
             }
@@ -506,7 +538,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 mapContainer.innerHTML = '';
             }
             setMap(null);
+            mainMarkerRef.current = null;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [details, mapTypeId]);
     
     useEffect(() => {
@@ -545,12 +579,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
 
     useEffect(() => {
-        if (map && currentLocation) {
-            map.setCenter(currentLocation);
-            const mainMarker = map.markers?.[0];
-            if(mainMarker) mainMarker.setPosition(currentLocation);
+        if (map && mapCenter) {
+            map.setCenter(mapCenter);
         }
-    }, [map, currentLocation]);
+    }, [map, mapCenter]);
 
     const handleFindMe = () => {
         if (navigator.geolocation) {
@@ -559,7 +591,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 };
-                setCurrentLocation(newLoc);
+                if (map) {
+                    map.setCenter(newLoc);
+                }
+                setMapCenter(newLoc);
             }, () => showAlert('현재 위치를 가져올 수 없습니다. 브라우저의 위치 정보 접근 권한을 확인해주세요.'));
         } else {
             showAlert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.');
@@ -587,9 +622,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         setIsDirectionModalOpen(true);
     };
 
-    const updatePhases = async (newPhases) => {
+    const updatePhases = (newPhases) => {
         setPhases(newPhases);
-        await updateDoc(docRef, { phases: newPhases });
+        // Deferring DB update to save button
     };
 
     const handleSelectPhaseType = (type) => {
@@ -599,6 +634,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         setIsPhaseModalOpen(false);
         setEditingIndex(null);
     };
+
 
     const handleSelectDirection = (direction) => {
         const newPhases = JSON.parse(JSON.stringify(phases));
@@ -711,59 +747,6 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         updatePhases(newPhases);
         setEditingTime({ index: null, value: '' });
     };
-    
-    const handlePhotoUpload = async (file) => {
-        if (!file) return;
-        setIsUploading(true);
-        const storage = getStorage();
-
-        if (photo) {
-            try {
-                const oldPhotoRef = ref(storage, photo);
-                await deleteObject(oldPhotoRef);
-            } catch (error) {
-                if (error.code !== 'storage/object-not-found') {
-                    console.error("Could not delete old photo, continuing with upload...", error);
-                }
-            }
-        }
-
-        const filePath = `artifacts/${appId}/users/${userId}/projects/${projectId}/${intersection.id}/${Date.now()}-${file.name}`;
-        const storageRef = ref(storage, filePath);
-        
-        try {
-            const snapshot = await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(snapshot.ref);
-            await updateDoc(docRef, {
-                representativePhoto: downloadURL
-            });
-            setPhoto(downloadURL);
-        } catch (error) {
-            console.error("Error uploading photo: ", error);
-            showAlert("사진 업로드에 실패했습니다.");
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    const handleDeletePhoto = async () => {
-        if (!photo) return;
-        showConfirm("이 사진을 삭제하시겠습니까?", async () => {
-            const storage = getStorage();
-            const photoRef = ref(storage, photo);
-            try {
-                await deleteObject(photoRef);
-                await updateDoc(docRef, {
-                    representativePhoto: null
-                });
-                setPhoto(null);
-            } catch (error) {
-                console.error("Error deleting photo: ", error);
-                showAlert("사진 삭제에 실패했습니다.");
-            }
-        }, null, () => {});
-    };
-
 
     const cycleLength = useMemo(() => {
         return phases.reduce((sum, phase) => {
@@ -796,7 +779,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     <>
                         <div className="relative">
                             <div ref={mapContainerRef} className="w-full h-96 bg-gray-200 dark:bg-gray-700 rounded-lg shadow-md overflow-hidden">
-                                {GOOGLE_MAPS_API_KEY.includes('YOUR_GOOGLE') &&
+                                {GOOGLE_MAPS_API_KEY.includes('AIzaSyB') &&
                                     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-700 p-4 text-center">
                                         <AlertTriangle size={48} className="mb-4" />
                                         <p className="text-lg font-bold">Google Maps API 키가 유효하지 않습니다.</p>
@@ -835,49 +818,29 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 </div>
                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">지도에 추가된 아이콘은 드래그하여 위치를 옮길 수 있습니다.</p>
                             </div>
+                            {/* *** NEW BUTTON: Save Location *** */}
+                            <button 
+                                onClick={handleSaveLocation} 
+                                disabled={isSavingLocation}
+                                className="w-full mt-4 p-3 bg-teal-500 text-white font-semibold rounded-lg shadow-md hover:bg-teal-600 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                                {isSavingLocation ? (
+                                    <>
+                                        <RefreshCw size={18} className="animate-spin" />
+                                        <span>저장 중...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle size={18} />
+                                        <span>교차로 위치 저장</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </>
                 )}
             </section>
             
-            <section className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><ImageIcon size={24} className="text-purple-500" /> 교차로 사진</h2>
-                    <button onClick={() => setIsPhotoVisible(!isPhotoVisible)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                        {isPhotoVisible ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
-                    </button>
-                </div>
-                {isPhotoVisible && (
-                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-                        <div className="aspect-video bg-gray-100 dark:bg-gray-700 rounded-md flex items-center justify-center overflow-hidden relative mb-4">
-                            {isUploading ? <p className="dark:text-gray-300">업로드 중...</p> : photo ? (
-                                <>
-                                    <img src={photo} alt="교차로 대표사진" className="w-full h-full object-cover"/>
-                                    <button onClick={handleDeletePhoto} className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-600">
-                                        <X size={16} />
-                                    </button>
-                                </>
-                            ) : (
-                                <div className="text-center text-gray-500 dark:text-gray-400">
-                                    <ImageIcon size={48} className="mx-auto"/>
-                                    <p>사진 없음</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex gap-4">
-                            <button onClick={() => cameraInputRef.current && cameraInputRef.current.click()} className="flex-1 flex items-center justify-center gap-2 p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">
-                                <Camera size={18}/> 사진 촬영
-                            </button>
-                            <input type="file" accept="image/*" capture="environment" ref={cameraInputRef} onChange={(e) => handlePhotoUpload(e.target.files[0])} className="hidden" />
-                            <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="flex-1 flex items-center justify-center gap-2 p-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 whitespace-nowrap">
-                                <ImageIcon size={18}/> 갤러리 선택
-                            </button>
-                            <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handlePhotoUpload(e.target.files[0])} className="hidden" />
-                        </div>
-                    </div>
-                )}
-            </section>
-
             <section>
                 <h2 className="text-xl font-semibold mb-3 flex items-center gap-2 dark:text-white"><Timer size={24} className="text-green-500" /> 신호 현시 정보</h2>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
@@ -1014,9 +977,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             </section>
             
             <div className="mt-8">
-                <button onClick={handleSaveAll} disabled={isSaving} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-4 px-4 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400">
+                <button onClick={handleSaveAll} disabled={isSaving || isSavingLocation} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-4 px-4 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400">
                     <Save size={20} />
-                    {isSaving ? '저장 중...' : '저장'}
+                    {isSaving ? '저장 중...' : '모든 변경사항 저장'}
                 </button>
             </div>
         </div>
@@ -1594,7 +1557,7 @@ export default function App() {
             </main>
             
             <footer className="fixed bottom-0 left-0 right-0 bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-center p-2 text-sm text-gray-500 dark:text-gray-400 z-30">
-                <p>Created by NYH | v1.3.8</p>
+                <p>Created by NYH | v1.4.0</p>
                 {userId && <p className="text-xs text-gray-400 mt-1">사용자 ID: {userId}</p>}
             </footer>
         </div>
