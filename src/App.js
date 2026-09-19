@@ -96,7 +96,10 @@ const loadGoogleMapsScript = (callback) => {
         script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
         script.id = 'googleMapsScript';
         document.body.appendChild(script);
-        script.onload = () => callback();
+        script.onload = () => {
+            script.setAttribute('data-loaded', 'true');
+            callback();
+        };
     } else if (existingScript.getAttribute('data-loaded') === 'true') {
         callback();
     } else {
@@ -1136,7 +1139,97 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     );
 };
 
-const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, onBack }) => {
+export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
+    const mapContainerRef = useRef(null);
+    const mapRef = useRef(null);
+    const markersRef = useRef([]);
+    const locatedIntersections = useMemo(() => intersections.filter(intersection => (
+        Number.isFinite(intersection.location?.lat) && Number.isFinite(intersection.location?.lng)
+    )), [intersections]);
+
+    useEffect(() => {
+        if (!mapContainerRef.current || !isGoogleMapsApiKeyConfigured || locatedIntersections.length === 0) return undefined;
+
+        let cancelled = false;
+        loadGoogleMapsScript(() => {
+            if (cancelled || !mapContainerRef.current) return;
+
+            const map = new window.google.maps.Map(mapContainerRef.current, {
+                center: locatedIntersections[0].location,
+                zoom: 16,
+                disableDefaultUI: true,
+                zoomControl: true,
+                fullscreenControl: true,
+                gestureHandling: 'cooperative',
+                mapTypeId: 'roadmap',
+            });
+            const bounds = new window.google.maps.LatLngBounds();
+
+            markersRef.current = locatedIntersections.map(intersection => {
+                bounds.extend(intersection.location);
+                const marker = new window.google.maps.Marker({
+                    position: intersection.location,
+                    map,
+                    title: `${intersection.number}. ${intersection.name}`,
+                    label: {
+                        text: String(intersection.number),
+                        color: '#ffffff',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                    },
+                    icon: {
+                        path: window.google.maps.SymbolPath.CIRCLE,
+                        scale: 18,
+                        fillColor: '#2563eb',
+                        fillOpacity: 0.95,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 3,
+                    },
+                });
+                marker.addListener('click', () => onSelect(intersection));
+                return marker;
+            });
+
+            if (locatedIntersections.length === 1) {
+                map.setCenter(locatedIntersections[0].location);
+                map.setZoom(16);
+            } else {
+                map.fitBounds(bounds, 52);
+            }
+            mapRef.current = map;
+        });
+
+        return () => {
+            cancelled = true;
+            markersRef.current.forEach(marker => marker.setMap(null));
+            markersRef.current = [];
+            mapRef.current = null;
+        };
+    }, [locatedIntersections, onSelect]);
+
+    return (
+        <section className="content-surface overflow-hidden mb-4" aria-label="프로젝트 교차로 위치 지도">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/60 dark:border-white/10">
+                <div>
+                    <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> 교차로 위치 지도</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">번호 표지를 누르면 해당 교차로로 이동합니다.</p>
+                </div>
+                <span className="flex-shrink-0 rounded-full bg-blue-100 dark:bg-blue-400/15 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">위치 {locatedIntersections.length}/{intersections.length}</span>
+            </div>
+            {locatedIntersections.length > 0 ? (
+                <div ref={mapContainerRef} className="w-full h-64 sm:h-72 bg-slate-200 dark:bg-slate-800" aria-label="등록된 교차로 지도" />
+            ) : (
+                <div className="h-40 flex flex-col items-center justify-center gap-2 px-6 text-center bg-white/35 dark:bg-white/[0.03] text-gray-500 dark:text-gray-400">
+                    <MapPin size={26} className="text-gray-400" />
+                    <p className="text-sm font-medium">저장된 교차로 위치가 없습니다.</p>
+                    <p className="text-xs">교차로 상세 화면에서 위치를 저장하면 이 지도에 번호로 표시됩니다.</p>
+                </div>
+            )}
+        </section>
+    );
+};
+
+export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, onBack }) => {
     const [editingId, setEditingId] = useState(null);
     const [editingNumber, setEditingNumber] = useState('');
     const [editingName, setEditingName] = useState('');
@@ -1152,8 +1245,9 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                 itemRefs.current[key].style.transform = '';
             }
         });
-        setSwipedId(id);
         touchStartX.current = e.targetTouches[0].clientX;
+        touchEndX.current = touchStartX.current;
+        if (swipedId !== id) setSwipedId(null);
     }
 
     const handleTouchMove = (id, e) => {
@@ -1164,6 +1258,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
         
         // Swipe left to reveal options
         if (diff < 0) {
+            if (diff < -4 && swipedId !== id) setSwipedId(id);
             target.style.transform = `translateX(${Math.max(diff, -128)}px)`;
         } 
         // Prevent swiping right past the origin
@@ -1215,6 +1310,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">조사할 교차로를 선택하거나 추가하세요.</p>
                 </div>
             </header>
+            <ProjectIntersectionMap intersections={intersections} onSelect={onSelect} />
             <div className="mb-4">
                 <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
                     <Plus size={20} /> 교차로 추가
@@ -1227,13 +1323,13 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                     ) : (
                         intersections.map(intersection => (
                             <li key={intersection.id} className="relative overflow-hidden">
-                                <div className="absolute top-0 right-0 h-full flex items-center">
-                                    <button onClick={() => startEditing(intersection)} className="h-full w-16 flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"><Edit size={20} /></button>
-                                    <button onClick={() => onDelete(intersection.id)} className="h-full w-16 flex items-center justify-center bg-red-500 text-white hover:bg-red-600"><Trash2 size={20} /></button>
+                                <div className={`absolute top-0 right-0 h-full flex items-center transition-opacity ${swipedId === intersection.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} aria-hidden={swipedId !== intersection.id}>
+                                    <button tabIndex={swipedId === intersection.id ? 0 : -1} onClick={() => startEditing(intersection)} aria-label={`${intersection.name} 편집`} className="h-full w-16 flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"><Edit size={20} /></button>
+                                    <button tabIndex={swipedId === intersection.id ? 0 : -1} onClick={() => onDelete(intersection.id)} aria-label={`${intersection.name} 삭제`} className="h-full w-16 flex items-center justify-center bg-red-500 text-white hover:bg-red-600"><Trash2 size={20} /></button>
                                 </div>
                                 <div 
                                     ref={el => itemRefs.current[intersection.id] = el}
-                                    className="relative bg-white/45 dark:bg-white/5 transition-transform duration-300"
+                                    className="relative z-10 bg-white/95 dark:bg-[#202631]/95 transition-transform duration-300"
                                     onTouchStart={(e) => handleTouchStart(intersection.id, e)} onTouchMove={(e) => handleTouchMove(intersection.id, e)} onTouchEnd={() => handleTouchEnd(intersection.id)}
                                 >
                                     <div className="p-2 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1269,6 +1365,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
 const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) => {
     const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState('');
+    const [swipedId, setSwipedId] = useState(null);
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
     const itemRefs = useRef({});
@@ -1280,6 +1377,8 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
             }
         });
         touchStartX.current = e.targetTouches[0].clientX;
+        touchEndX.current = touchStartX.current;
+        if (swipedId !== id) setSwipedId(null);
     }
 
     const handleTouchMove = (id, e) => {
@@ -1289,6 +1388,7 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
         if (!target) return;
 
         if (diff < 0) {
+            if (diff < -4 && swipedId !== id) setSwipedId(id);
             target.style.transform = `translateX(${Math.max(diff, -128)}px)`;
         } else if (diff > 0 && target.style.transform !== '') {
             target.style.transform = `translateX(${Math.min(diff - 128, 0)}px)`;
@@ -1302,8 +1402,10 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
 
         if (diff < -50) {
             target.style.transform = 'translateX(-128px)';
+            setSwipedId(id);
         } else {
             target.style.transform = '';
+            if (swipedId === id) setSwipedId(null);
         }
     }
 
@@ -1342,13 +1444,13 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                     ) : (
                         projects.map((project, index) => (
                             <li key={project.id} className="relative overflow-hidden">
-                                <div className="absolute top-0 right-0 h-full flex items-center">
-                                    <button onClick={() => startEditing(project)} className="h-full w-16 flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"><Edit size={20} /></button>
-                                    <button onClick={() => onDelete(project.id)} className="h-full w-16 flex items-center justify-center bg-red-500 text-white hover:bg-red-600"><Trash2 size={20} /></button>
+                                <div className={`absolute top-0 right-0 h-full flex items-center transition-opacity ${swipedId === project.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} aria-hidden={swipedId !== project.id}>
+                                    <button tabIndex={swipedId === project.id ? 0 : -1} onClick={() => startEditing(project)} aria-label={`${project.name} 편집`} className="h-full w-16 flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"><Edit size={20} /></button>
+                                    <button tabIndex={swipedId === project.id ? 0 : -1} onClick={() => onDelete(project.id)} aria-label={`${project.name} 삭제`} className="h-full w-16 flex items-center justify-center bg-red-500 text-white hover:bg-red-600"><Trash2 size={20} /></button>
                                 </div>
                                 <div 
                                     ref={el => itemRefs.current[project.id] = el}
-                                    className="relative bg-white/45 dark:bg-white/5 transition-transform duration-300"
+                                    className="relative z-10 bg-white/95 dark:bg-[#202631]/95 transition-transform duration-300"
                                     onTouchStart={(e) => handleTouchStart(project.id, e)} onTouchMove={(e) => handleTouchMove(project.id, e)} onTouchEnd={() => handleTouchEnd(project.id)}
                                 >
                                     <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1629,10 +1731,10 @@ export default function App() {
         setView('intersections');
     }
 
-    const selectIntersection = (intersection) => {
+    const selectIntersection = useCallback((intersection) => {
         setSelectedIntersection(intersection);
         setView('detail');
-    }
+    }, []);
 
     const backToIntersections = useCallback(() => {
         setSelectedIntersection(null);

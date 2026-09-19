@@ -3,9 +3,11 @@ import {
   MOVEMENT_DIRECTIONS,
   MOVEMENT_TYPES,
   DirectionSettingsModal,
+  IntersectionList,
   MovementArrowIcon,
   PhaseMovementSummary,
   PhaseSelectionModal,
+  ProjectIntersectionMap,
   buildExportCsv,
   formatPhaseMovements,
   normalizePhaseMovements,
@@ -91,4 +93,49 @@ test('exports complete Korean CSV data with safe quotes and field details', () =
   expect(csv).toContain('"SB 직진"');
   expect(csv).toContain('"12.3 · 12.8"');
   expect(csv).toContain('"쉼표, 따옴표 ""확인"""');
+});
+
+test('keeps intersection edit actions hidden until a real left swipe', () => {
+  const intersection = { id: 'i1', number: 1, name: '시청 교차로', location: null };
+  const { container } = render(
+    <IntersectionList
+      intersections={[intersection]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onBack={() => {}}
+    />,
+  );
+
+  const editButton = container.querySelector('[aria-label="시청 교차로 편집"]');
+  const foreground = screen.getByText('시청 교차로').closest('li').querySelector('.z-10');
+  expect(editButton).toHaveAttribute('tabindex', '-1');
+  expect(editButton.parentElement).toHaveClass('opacity-0', 'pointer-events-none');
+
+  fireEvent.touchStart(foreground, { targetTouches: [{ clientX: 220 }] });
+  fireEvent.touchMove(foreground, { targetTouches: [{ clientX: 120 }] });
+  fireEvent.touchEnd(foreground);
+
+  expect(editButton).toHaveAttribute('tabindex', '0');
+  expect(editButton.parentElement).toHaveClass('opacity-100');
+  expect(foreground).toHaveStyle({ transform: 'translateX(-128px)' });
+});
+
+test('summarizes located intersections and explains missing locations on the project map', () => {
+  const { rerender } = render(<ProjectIntersectionMap intersections={[]} onSelect={() => {}} />);
+  expect(screen.getByText('위치 0/0')).toBeInTheDocument();
+  expect(screen.getByText('저장된 교차로 위치가 없습니다.')).toBeInTheDocument();
+
+  rerender(
+    <ProjectIntersectionMap
+      intersections={[
+        { id: 'i1', number: 1, name: '시청', location: { lat: 37.5, lng: 127 } },
+        { id: 'i2', number: 2, name: '역앞', location: null },
+      ]}
+      onSelect={() => {}}
+    />,
+  );
+  expect(screen.getByText('위치 1/2')).toBeInTheDocument();
+  expect(screen.getByLabelText('등록된 교차로 지도')).toBeInTheDocument();
 });
