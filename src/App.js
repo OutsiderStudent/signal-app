@@ -541,12 +541,12 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     )
 };
 
-const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, soundEnabled, onToggleVibration, onToggleSound, canInstall, onInstall, onBackup, onReset }) => {
+export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, soundEnabled, onToggleVibration, onToggleSound, canInstall, isInstalled, isIos, onInstall, onBackup, onReset }) => {
     if (!isOpen) return null;
 
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="glass-modal p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="glass-modal max-h-[calc(100vh-2rem)] w-full max-w-sm overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold dark:text-white">설정</h3>
                     <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300"><X size={20}/></button>
@@ -569,9 +569,34 @@ const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibratio
                         <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Volume2 size={20}/> 기록 효과음</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${soundEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{soundEnabled ? '켜짐' : '꺼짐'}</span>
                     </button>
-                    {canInstall && <button onClick={onInstall} className="min-h-12 w-full flex items-center gap-3 rounded-2xl bg-blue-50 p-3 font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-400/10 dark:text-blue-300">
-                        <Download size={20}/> 홈 화면에 앱 설치
-                    </button>}
+                    <section aria-label="홈 화면 앱 설치 안내" className="rounded-2xl border border-blue-200/80 bg-blue-50/70 p-4 text-left dark:border-blue-400/20 dark:bg-blue-400/10">
+                        <div className="mb-2 flex items-center gap-2 font-bold text-blue-800 dark:text-blue-200">
+                            <Smartphone size={20}/> 홈 화면에 앱 설치
+                        </div>
+                        {isInstalled ? (
+                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">이 기기에 앱으로 설치되어 있습니다.</p>
+                        ) : canInstall ? (
+                            <>
+                                <p className="mb-3 text-sm leading-6 text-blue-900/80 dark:text-blue-100/80">아래 버튼을 누르면 일반 앱처럼 홈 화면에서 실행할 수 있습니다.</p>
+                                <button onClick={onInstall} className="min-h-12 w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700">
+                                    지금 설치하기
+                                </button>
+                            </>
+                        ) : isIos ? (
+                            <ol className="list-decimal space-y-1 pl-5 text-sm leading-6 text-blue-900/85 dark:text-blue-100/85">
+                                <li>이 페이지를 <strong>Safari</strong>에서 엽니다.</li>
+                                <li>Safari의 <strong>공유</strong> 버튼을 누릅니다.</li>
+                                <li><strong>홈 화면에 추가</strong> → <strong>추가</strong>를 누릅니다.</li>
+                            </ol>
+                        ) : (
+                            <ol className="list-decimal space-y-1 pl-5 text-sm leading-6 text-blue-900/85 dark:text-blue-100/85">
+                                <li>Chrome 또는 Edge의 오른쪽 위 <strong>메뉴(⋮)</strong>를 누릅니다.</li>
+                                <li><strong>앱 설치</strong> 또는 <strong>홈 화면에 추가</strong>를 누릅니다.</li>
+                                <li>표시되는 설치 창에서 <strong>설치</strong>를 누릅니다.</li>
+                            </ol>
+                        )}
+                        {!isInstalled && <p className="mt-2 text-xs leading-5 text-blue-700/75 dark:text-blue-200/70">설치가 끝나면 홈 화면의 ‘신호현시조사’ 아이콘으로 실행하세요.</p>}
+                    </section>
                     <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>
@@ -1890,7 +1915,12 @@ export default function App() {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [installPrompt, setInstallPrompt] = useState(null);
+    const [isInstalled, setIsInstalled] = useState(() => Boolean(
+        window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+    ));
     const [updateRegistration, setUpdateRegistration] = useState(null);
+    const isIos = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
     const [view, setView] = useState('projects'); // 'projects', 'intersections', 'detail'
 
@@ -1925,7 +1955,10 @@ export default function App() {
             event.preventDefault();
             setInstallPrompt(event);
         };
-        const handleAppInstalled = () => setInstallPrompt(null);
+        const handleAppInstalled = () => {
+            setInstallPrompt(null);
+            setIsInstalled(true);
+        };
         const handleUpdate = event => setUpdateRegistration(event.detail);
         window.addEventListener('beforeinstallprompt', handleInstallPrompt);
         window.addEventListener('appinstalled', handleAppInstalled);
@@ -2192,6 +2225,8 @@ export default function App() {
                     return next;
                 })}
                 canInstall={Boolean(installPrompt)}
+                isInstalled={isInstalled}
+                isIos={isIos}
                 onInstall={handleInstallApp}
                 onBackup={() => { setIsSettingsOpen(false); setIsExportModalOpen(true); }}
                 onReset={handleResetApp}

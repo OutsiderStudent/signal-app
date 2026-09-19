@@ -8,6 +8,7 @@ import {
   PhaseMovementSummary,
   PhaseSelectionModal,
   ProjectIntersectionMap,
+  SettingsModal,
   buildExportCsv,
   buildWorkbookData,
   areCoordinatesEqual,
@@ -18,6 +19,34 @@ import {
   normalizePhaseMovements,
   reattachMapMarker,
 } from './App';
+
+const settingsProps = {
+  isOpen: true,
+  onClose: () => {},
+  isDarkMode: false,
+  onToggleDarkMode: () => {},
+  vibrationEnabled: true,
+  soundEnabled: true,
+  onToggleVibration: () => {},
+  onToggleSound: () => {},
+  onInstall: () => {},
+  onBackup: () => {},
+  onReset: () => {},
+};
+
+test('always shows iPhone PWA installation guidance when a native prompt is unavailable', () => {
+  render(<SettingsModal {...settingsProps} canInstall={false} isInstalled={false} isIos />);
+  expect(screen.getByRole('region', { name: '홈 화면 앱 설치 안내' })).toBeInTheDocument();
+  expect(screen.getByText(/Safari의/)).toBeInTheDocument();
+  expect(screen.getByText('홈 화면에 추가')).toBeInTheDocument();
+});
+
+test('offers a direct PWA install action when the browser supports it', () => {
+  const onInstall = jest.fn();
+  render(<SettingsModal {...settingsProps} canInstall isInstalled={false} isIos={false} onInstall={onInstall} />);
+  fireEvent.click(screen.getByRole('button', { name: '지금 설치하기' }));
+  expect(onInstall).toHaveBeenCalledTimes(1);
+});
 
 test.each(MOVEMENT_DIRECTIONS.flatMap(direction => MOVEMENT_TYPES.map(type => [direction, type])))('renders %s %s movement without shared arrow markers', (direction, type) => {
   const { container } = render(<MovementArrowIcon direction={direction} type={type} />);
