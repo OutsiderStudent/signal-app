@@ -112,6 +112,11 @@ export const DEFAULT_DIRECTIONS = ['SB', 'NB', 'EB', 'WB'];
 export const MOVEMENT_DIRECTIONS = ALL_DIRECTIONS;
 export const MOVEMENT_TYPES = ['직진', '좌회전', '우회전'];
 
+export const reattachMapMarker = (marker, map, position) => {
+    marker.setPosition(position);
+    marker.setMap(map);
+};
+
 const directionRotation = { NB: 0, NEB: 45, EB: 90, SEB: 135, SB: 180, SWB: -135, WB: -90, NWB: -45 };
 const oppositeDirection = { SB: 'NB', SWB: 'NEB', WB: 'EB', NWB: 'SEB', NB: 'SB', NEB: 'SWB', EB: 'WB', SEB: 'NWB' };
 
@@ -506,6 +511,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [isDirty, setIsDirty] = useState(false);
     const initialData = useRef(null);
     const [isLocationVisible, setIsLocationVisible] = useState(true);
+    const hasDetails = Boolean(details);
 
     const docRef = useMemo(() => doc(db, `/artifacts/${appId}/users/${userId}/projects/${projectId}/intersections`, intersection.id), [db, appId, userId, projectId, intersection.id]);
 
@@ -644,7 +650,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     useEffect(() => {
         const mapContainer = mapContainerRef.current;
-        if (!details || !mapContainer || !isLocationVisible || !isGoogleMapsApiKeyConfigured) return;
+        if (!hasDetails || !mapContainer || !isLocationVisible || !isGoogleMapsApiKeyConfigured) return;
     
         loadGoogleMapsScript(() => {
             if (!mapContainerRef.current) return;
@@ -686,6 +692,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         });
         
         return () => {
+            Object.values(markersRef.current).forEach(marker => marker.setMap(null));
+            markersRef.current = {};
+            if (mainMarkerRef.current) mainMarkerRef.current.setMap(null);
             if (mapContainer) {
                 mapContainer.innerHTML = '';
             }
@@ -693,7 +702,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             mainMarkerRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [details, isLocationVisible]);
+    }, [hasDetails, isLocationVisible]);
 
     useEffect(() => {
         if (map) map.setMapTypeId(mapTypeId);
@@ -710,7 +719,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
         Object.entries(mapIcons).forEach(([dir, pos]) => {
             if (markersRef.current[dir]) {
-                markersRef.current[dir].setPosition(pos);
+                reattachMapMarker(markersRef.current[dir], map, pos);
             } else {
                 const newMarker = new window.google.maps.Marker({
                     position: pos,
@@ -908,17 +917,17 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     if (!details) return <div className="p-6 text-center dark:text-gray-300">교차로 정보를 불러오는 중...</div>;
 
     return (
-        <div className="p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-28 max-w-5xl mx-auto">
+        <div className="p-3 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-28 max-w-5xl mx-auto">
             {isPhaseModalOpen && editingIndex !== null && <PhaseSelectionModal directions={directions} initialMovements={phases[editingIndex]?.movements || []} isPermissive={phases[editingIndex]?.isPermissive || false} onClose={() => { setIsPhaseModalOpen(false); setEditingIndex(null); }} onSave={handleSavePhaseMovements} />}
             {isDirectionSettingsOpen && <DirectionSettingsModal directions={directions} usedDirections={[...new Set([...phases.flatMap(phase => phase.movements.map(movement => movement.direction)), ...Object.keys(mapIcons)])]} onClose={() => setIsDirectionSettingsOpen(false)} onSave={handleSaveDirections} />}
-            <header className="mb-6">
+            <header className="mb-4 sm:mb-6">
                 <div className="flex items-center justify-between">
                     <button onClick={handleBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all"><ArrowLeft size={20} /> 목록으로</button>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-center mt-2 truncate">{details.number}. {details.name}</h1>
             </header>
 
-            <section className="mb-8">
+            <section className="mb-5 sm:mb-8">
                  <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><MapPin size={24} className="text-blue-500" /> 교차로 위치</h2>
                     <button onClick={() => setIsLocationVisible(!isLocationVisible)} aria-label={isLocationVisible ? '지도 영역 접기' : '지도 영역 펼치기'} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
@@ -992,39 +1001,37 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             </section>
             
             <section>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                    <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><Timer size={24} className="text-green-500" /> 신호 현시 정보</h2>
-                    <button type="button" onClick={() => setIsDirectionSettingsOpen(true)} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 dark:text-blue-200 hover:bg-white/80 dark:hover:bg-white/10"><SlidersHorizontal size={16} /> 방향 설정 <span className="text-xs opacity-70">{directions.length}</span></button>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-1.5 dark:text-white"><Timer size={21} className="text-green-500" /> 신호 현시 정보</h2>
+                    <button type="button" onClick={() => setIsDirectionSettingsOpen(true)} className="glass-toolbar min-h-11 flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-200 hover:bg-white/80 dark:hover:bg-white/10"><SlidersHorizontal size={16} /> 방향 설정 <span className="text-[11px] opacity-70">{directions.length}</span></button>
                 </div>
-                <div className="content-surface p-3 sm:p-4">
-                    <div className="mb-3 flex justify-between items-center bg-white/55 dark:bg-white/5 border border-white/60 dark:border-white/10 px-4 py-3 rounded-2xl">
-                        <div className="flex items-baseline gap-2"><span className="font-bold dark:text-white">신호 주기</span><span className="text-xs text-gray-500 dark:text-gray-400">{phases.length}현시</span></div>
-                        <span className="font-bold text-xl text-emerald-700 dark:text-emerald-400">{cycleLength}초</span>
+                <div className="content-surface p-2 sm:p-4">
+                    <div className="mb-2 flex justify-between items-center bg-white/55 dark:bg-white/5 border border-white/60 dark:border-white/10 px-3 py-2 rounded-xl sm:rounded-2xl">
+                        <div className="flex items-baseline gap-1.5"><span className="font-bold text-sm sm:text-base dark:text-white">신호 주기</span><span className="text-[11px] text-gray-500 dark:text-gray-400">{phases.length}현시</span></div>
+                        <span className="font-bold text-lg sm:text-xl text-emerald-700 dark:text-emerald-400">{cycleLength}초</span>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5 sm:space-y-2">
                         {phases.map((phase, index) => {
                              const latestTime = phase.times && phase.times.length > 0 ? phase.times[phase.times.length - 1] : 0;
                              const isCurrentlyTiming = timer.active && timer.index === index;
                              const isThisPhaseInRecordMode = isRecordModeActive && currentRecordingPhaseIndex === index;
 
                             return(
-                            <div key={index} className={`phase-card p-3 space-y-2 transition-all duration-300 ${isThisPhaseInRecordMode ? 'phase-card-active' : ''}`}>
-                                <div className="flex justify-between items-center gap-2">
-                                    <div className="flex items-stretch gap-2 flex-grow min-w-0">
+                            <div key={index} className={`phase-card px-2.5 py-2 space-y-1.5 transition-all duration-300 ${isThisPhaseInRecordMode ? 'phase-card-active' : ''}`}>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="flex items-stretch gap-1.5 flex-grow min-w-0">
                                         <span className="flex-shrink-0 flex items-center justify-center h-11 min-w-11 px-2 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-sm">P{index + 1}</span>
-                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} aria-label={`${index + 1}번 현시 이동류 조합 편집`} title="눌러서 현시 이동류 조합 편집" className="group w-full flex items-center justify-between gap-2 px-3 py-2 min-h-11 bg-white/55 dark:bg-white/5 hover:bg-blue-50/90 dark:hover:bg-blue-400/10 rounded-2xl border border-white/70 hover:border-blue-300 dark:border-white/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 min-w-0 text-left transition-all">
+                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} aria-label={`${index + 1}번 현시 이동류 조합 편집`} title="눌러서 현시 이동류 조합 편집" className="group w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 min-h-11 bg-white/55 dark:bg-white/5 hover:bg-blue-50/90 dark:hover:bg-blue-400/10 rounded-2xl border border-white/70 hover:border-blue-300 dark:border-white/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 min-w-0 text-left transition-all">
                                             <PhaseMovementSummary movements={phase.movements} isPermissive={phase.isPermissive} />
-                                            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300"><Edit size={12} /> 이동류 편집</span>
+                                            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300"><Edit size={14} /><span className="hidden sm:inline">이동류 편집</span></span>
                                         </button>
                                     </div>
-                                    <button onClick={() => handleRemovePhase(index)} aria-label={`${index + 1}번 현시 삭제`} disabled={isRecordModeActive || phases.length <= 1} className="ml-2 p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full disabled:text-gray-400 dark:disabled:text-gray-500 disabled:bg-transparent disabled:cursor-not-allowed">
+                                    <button onClick={() => handleRemovePhase(index)} aria-label={`${index + 1}번 현시 삭제`} disabled={isRecordModeActive || phases.length <= 1} className="flex h-11 w-11 flex-shrink-0 items-center justify-center text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full disabled:text-gray-400 dark:disabled:text-gray-500 disabled:bg-transparent disabled:cursor-not-allowed">
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                    <div className="flex items-center justify-between sm:justify-start gap-3">
-                                        <div className="flex flex-col items-center gap-1">
-                                            <label htmlFor={`permissive-${index}`} className="text-[11px] dark:text-gray-300">비보호</label>
+                                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-700">
+                                        <label htmlFor={`permissive-${index}`} className="min-h-11 px-2 flex items-center gap-1.5 rounded-xl text-[10px] sm:text-[11px] dark:text-gray-300 hover:bg-white/50 dark:hover:bg-white/5">
                                             <input
                                                 type="checkbox"
                                                 id={`permissive-${index}`}
@@ -1033,8 +1040,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                                 disabled={isRecordModeActive || !phase.movements.some(movement => movement.type === '좌회전')}
                                                 className="w-5 h-5 accent-amber-500 disabled:opacity-30"
                                             />
-                                        </div>
-                                        <div className="flex items-center gap-2 dark:text-white">
+                                            <span>비보호</span>
+                                        </label>
+                                        <div className="min-h-11 flex items-center justify-center gap-1.5 dark:text-white min-w-0">
                                             {editingTime.index === index ? (
                                                 <input
                                                     type="number"
@@ -1043,12 +1051,12 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                                     onChange={(e) => setEditingTime({ ...editingTime, value: e.target.value })}
                                                     onBlur={() => handleSaveTime(index)}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTime(index); }}
-                                                    className="w-20 text-center font-mono text-xl font-bold bg-transparent border-b-2 border-blue-500 focus:outline-none"
+                                                    className="w-20 text-center font-mono text-lg sm:text-xl font-bold bg-transparent border-b-2 border-blue-500 focus:outline-none"
                                                     autoFocus
                                                 />
                                             ) : (
                                                 <>
-                                                    <span className="font-mono text-xl font-bold" onClick={() => handleEditTimeClick(index, latestTime)}>
+                                                    <span className="font-mono text-lg sm:text-xl font-bold" onClick={() => handleEditTimeClick(index, latestTime)}>
                                                         {isCurrentlyTiming ? timer.elapsed.toFixed(1) : latestTime.toFixed(1)}
                                                     </span>
                                                     <span className="text-xs text-gray-400">초</span>
@@ -1063,38 +1071,35 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                                 </>
                                             )}
                                         </div>
-                                        {phase.times.length > 1 && 
-                                            <div className="text-xs text-gray-500 dark:text-gray-400 pb-1 flex items-center gap-1">
-                                                <History size={12}/>
-                                                <span>이전: {phase.times[phase.times.length - 2]}s</span>
-                                            </div>
-                                        }
-                                    </div>
-                                    <div className="flex items-center justify-center sm:justify-end gap-2 flex-wrap">
                                         <button onClick={() => handleIndividualTimerToggle(index)} 
-                                            className={`w-24 p-2 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${isRecordModeActive || (timer.active && !isCurrentlyTiming) ? 'bg-gray-400 cursor-not-allowed' : (isCurrentlyTiming ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600')}`}
+                                            className={`min-h-11 min-w-[72px] px-2 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${isRecordModeActive || (timer.active && !isCurrentlyTiming) ? 'bg-gray-400 cursor-not-allowed' : (isCurrentlyTiming ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600')}`}
                                             disabled={isRecordModeActive || (timer.active && !isCurrentlyTiming)}
                                         >
                                             {isCurrentlyTiming ? <Square size={16}/> : <Play size={16}/>}
                                             <span>{isCurrentlyTiming ? '중지' : '시작'}</span>
                                         </button>
-                                    </div>
                                 </div>
+                                {phase.times.length > 1 &&
+                                    <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1 leading-none">
+                                        <History size={11}/>
+                                        <span>이전 {phase.times[phase.times.length - 2]}초</span>
+                                    </div>
+                                }
                             </div>
                         )})}
                     </div>
-                    <div className="mt-3">
-                        <button onClick={handleAddPhase} disabled={isRecordModeActive} className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-blue-300 dark:border-blue-400/30 rounded-2xl text-blue-600 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-400/5 hover:bg-blue-100/70 dark:hover:bg-blue-400/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <div className="mt-2">
+                        <button onClick={handleAddPhase} disabled={isRecordModeActive} className="min-h-11 w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-blue-300 dark:border-blue-400/30 rounded-xl sm:rounded-2xl text-sm text-blue-600 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-400/5 hover:bg-blue-100/70 dark:hover:bg-blue-400/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <Plus size={18} />
                             현시 추가 (현재 {phases.length}개 · 제한 없음)
                         </button>
                     </div>
-                    <div className="mt-5 border-t dark:border-gray-700 pt-4">
-                         <h3 className="text-lg font-semibold text-center mb-3 dark:text-white">연속 시간 기록 모드</h3>
+                    <div className="mt-3 border-t dark:border-gray-700 pt-3">
+                         <h3 className="text-sm sm:text-base font-semibold text-center mb-2 dark:text-white">연속 시간 기록 모드</h3>
                          <button 
                             onClick={isRecordModeActive ? handleRecordAndNext : handleToggleRecordMode}
                             disabled={timer.active && !isRecordModeActive}
-                            className={`soft-button w-full p-4 text-white font-bold text-lg flex items-center justify-center gap-3 ${isRecordModeActive ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-400 disabled:cursor-not-allowed`}
+                            className={`soft-button min-h-12 w-full px-4 py-3 text-white font-bold text-base flex items-center justify-center gap-2 ${isRecordModeActive ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-400 disabled:cursor-not-allowed`}
                         >
                             {isRecordModeActive ? (
                                 <>
@@ -1296,7 +1301,7 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
 
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
-            <header className="mb-6">
+            <header className="mb-4 sm:mb-6">
                 <div className="relative h-8 z-10">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2">
                         <button onClick={onBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all">

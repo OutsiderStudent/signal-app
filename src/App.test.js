@@ -11,6 +11,7 @@ import {
   buildExportCsv,
   formatPhaseMovements,
   normalizePhaseMovements,
+  reattachMapMarker,
 } from './App';
 
 test.each(MOVEMENT_DIRECTIONS.flatMap(direction => MOVEMENT_TYPES.map(type => [direction, type])))('renders %s %s movement without shared arrow markers', (direction, type) => {
@@ -138,4 +139,15 @@ test('summarizes located intersections and explains missing locations on the pro
   );
   expect(screen.getByText('위치 1/2')).toBeInTheDocument();
   expect(screen.getByLabelText('등록된 교차로 지도')).toBeInTheDocument();
+});
+
+test('reattaches direction markers when the map instance is refreshed after saving', () => {
+  const marker = { setPosition: jest.fn(), setMap: jest.fn() };
+  const map = { id: 'refreshed-map' };
+  const position = { lat: 37.5, lng: 127 };
+
+  reattachMapMarker(marker, map, position);
+
+  expect(marker.setPosition).toHaveBeenCalledWith(position);
+  expect(marker.setMap).toHaveBeenCalledWith(map);
 });
