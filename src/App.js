@@ -1,9 +1,10 @@
 /* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
+import * as XLSX from 'xlsx';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal } from 'lucide-react';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal } from 'lucide-react';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -25,6 +26,17 @@ const localFirebaseConfig = {
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : localFirebaseConfig;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'local-dev-app';
+
+const createFirestore = (firebaseApp) => {
+    try {
+        return initializeFirestore(firebaseApp, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+        });
+    } catch (error) {
+        console.warn('Persistent offline cache unavailable; using the default Firestore cache.', error);
+        return getFirestore(firebaseApp);
+    }
+};
 
 
 // --- UI Helper Functions ---
@@ -112,6 +124,36 @@ export const DEFAULT_DIRECTIONS = ['SB', 'NB', 'EB', 'WB'];
 export const MOVEMENT_DIRECTIONS = ALL_DIRECTIONS;
 export const MOVEMENT_TYPES = ['직진', '좌회전', '우회전'];
 
+export const formatSavedAt = (value) => {
+    if (!value) return '아직 저장되지 않음';
+    const date = value?.toDate ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return '저장 시각 알 수 없음';
+    return new Intl.DateTimeFormat('ko-KR', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).format(date);
+};
+
+export const getIntersectionStatus = (intersection = {}) => {
+    const hasIdentity = Number.isFinite(Number(intersection.number)) && String(intersection.name || '').trim().length > 0;
+    const hasLocation = Number.isFinite(intersection.location?.lat) && Number.isFinite(intersection.location?.lng);
+    const phases = Array.isArray(intersection.phases) ? intersection.phases : [];
+    const hasCompletePhases = phases.length > 0 && phases.every(phase => {
+        const times = Array.isArray(phase.times) ? phase.times : [];
+        return times.length > 0 && Number.isFinite(Number(times[times.length - 1])) && Number(times[times.length - 1]) > 0;
+    });
+    return hasIdentity && hasLocation && hasCompletePhases ? '조사완료' : '조사필요';
+};
+
+const showToast = (message, tone = 'success') => {
+    const toast = document.createElement('div');
+    toast.setAttribute('role', 'status');
+    toast.className = `fixed left-1/2 top-4 z-[70] -translate-x-1/2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur-xl ${tone === 'error' ? 'bg-red-600/95' : 'bg-slate-900/90'}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 2200);
+};
+
 export const reattachMapMarker = (marker, map, position) => {
     marker.setPosition(position);
     marker.setMap(map);
@@ -135,13 +177,10 @@ export const MovementArrowIcon = ({ direction, type, className = 'h-9 w-9' }) =>
 
 export const normalizePhaseMovements = (phase = {}) => {
     if (Array.isArray(phase.movements)) {
-        const seen = new Set();
-        return phase.movements.filter(movement => {
-            const key = `${movement?.direction}-${movement?.type}`;
-            if (!MOVEMENT_DIRECTIONS.includes(movement?.direction) || !MOVEMENT_TYPES.includes(movement?.type) || seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
+        // 특수 교차로에서는 같은 방향·이동류가 중복될 수 있으므로 유효성만 확인하고 원본 순서를 보존합니다.
+        return phase.movements.filter(movement => (
+            MOVEMENT_DIRECTIONS.includes(movement?.direction) && MOVEMENT_TYPES.includes(movement?.type)
+        ));
     }
 
     const direction = MOVEMENT_DIRECTIONS.includes(phase.direction) ? phase.direction : null;
@@ -202,6 +241,84 @@ export const buildExportCsv = (projects = [], intersectionsData = {}, selectedPr
     return rows.length ? `\uFEFF${headers.map(escapeCsvCell).join(',')}\r\n${rows.map(row => row.join(',')).join('\r\n')}` : '';
 };
 
+export const buildWorkbookData = (projects = [], intersectionsData = {}, selectedProjects = {}) => {
+    const selected = projects.filter(project => selectedProjects[project.id]);
+    const projectRows = selected.map(project => ({
+        프로젝트ID: project.id,
+        프로젝트명: project.name,
+        생성일시: formatSavedAt(project.createdAt),
+    }));
+    const intersectionRows = [];
+    const phaseRows = [];
+    const observationRows = [];
+    const movementRows = [];
+
+    selected.forEach(project => {
+        (intersectionsData[project.id] || []).forEach(intersection => {
+            intersectionRows.push({
+                프로젝트ID: project.id,
+                프로젝트명: project.name,
+                교차로ID: intersection.id,
+                교차로번호: intersection.number,
+                교차로명: intersection.name,
+                조사자: intersection.surveyor || '',
+                조사일시: intersection.surveyedAt || '',
+                조사상태: getIntersectionStatus(intersection),
+                교차로지수: (intersection.directions || DEFAULT_DIRECTIONS).length,
+                위도: intersection.location?.lat ?? '',
+                경도: intersection.location?.lng ?? '',
+                방향: (intersection.directions || DEFAULT_DIRECTIONS).join(', '),
+                현장메모: intersection.memo || '',
+                마지막저장: formatSavedAt(intersection.savedAt),
+            });
+            (intersection.phases || []).forEach((phase, phaseIndex) => {
+                const times = Array.isArray(phase.times) ? phase.times : [];
+                phaseRows.push({
+                    교차로ID: intersection.id,
+                    현시번호: phaseIndex + 1,
+                    최종시간초: times.length ? times[times.length - 1] : '',
+                    비보호좌회전: phase.isPermissive ? 'Y' : 'N',
+                    이동류요약: formatPhaseMovements(normalizePhaseMovements(phase)),
+                });
+                times.forEach((seconds, observationIndex) => observationRows.push({
+                    교차로ID: intersection.id,
+                    현시번호: phaseIndex + 1,
+                    측정순번: observationIndex + 1,
+                    시간초: seconds,
+                }));
+                normalizePhaseMovements(phase).forEach((movement, movementIndex) => movementRows.push({
+                    교차로ID: intersection.id,
+                    현시번호: phaseIndex + 1,
+                    이동류순번: movementIndex + 1,
+                    방향: movement.direction,
+                    이동류: movement.type,
+                }));
+            });
+        });
+    });
+    return {
+        프로젝트: projectRows,
+        교차로: intersectionRows,
+        현시: phaseRows,
+        시간관측: observationRows,
+        이동류: movementRows,
+        코드북: [
+            { 필드: '조사상태', 설명: '교차로명·번호·위치·모든 현시시간이 있으면 조사완료' },
+            { 필드: '비보호좌회전', 설명: 'Y=비보호, N=보호 또는 해당 없음' },
+            { 필드: '시간초', 설명: '현시별 각 측정값을 한 행으로 분리' },
+        ],
+    };
+};
+
+const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+
+const currentLocalDateTime = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
 export const PhaseMovementSummary = ({ movements = [], isPermissive = false }) => {
     if (!movements.length) {
         return <span className="inline-flex items-center gap-2 text-sm font-semibold text-red-500"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />올레드</span>;
@@ -229,6 +346,8 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     const [selectedProjects, setSelectedProjects] = useState({});
     const [intersectionsData, setIntersectionsData] = useState({});
     const [isLoading, setIsLoading] = useState(true);
+    const [isImporting, setIsImporting] = useState(false);
+    const importInputRef = useRef(null);
 
     useEffect(() => {
         if (isOpen && db && userId && appId) {
@@ -271,6 +390,109 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
         onClose();
     };
 
+    const handleXlsxExport = () => {
+        const tables = buildWorkbookData(projects, intersectionsData, selectedProjects);
+        if (!tables.프로젝트.length) {
+            showAlert("내보낼 프로젝트를 선택해주세요.");
+            return;
+        }
+        const workbook = XLSX.utils.book_new();
+        Object.entries(tables).forEach(([sheetName, rows]) => {
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            worksheet['!cols'] = Object.keys(rows[0] || {}).map(key => ({ wch: Math.max(12, key.length * 2 + 2) }));
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+        });
+        XLSX.writeFile(workbook, `신호현시조사_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        showToast('XLSX 파일을 만들었습니다.');
+    };
+
+    const handleJsonBackup = () => {
+        const selected = projects.filter(project => selectedProjects[project.id]);
+        if (!selected.length) {
+            showAlert("백업할 프로젝트를 선택해주세요.");
+            return;
+        }
+        const backup = {
+            schemaVersion: 1,
+            appVersion: '2.0.0',
+            exportedAt: new Date().toISOString(),
+            projects: selected.map(project => ({ ...project, intersections: intersectionsData[project.id] || [] })),
+        };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `신호현시조사_백업_${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast('JSON 전체 백업을 만들었습니다.');
+    };
+
+    const handlePdfPreview = () => {
+        const selected = projects.filter(project => selectedProjects[project.id]);
+        if (!selected.length) {
+            showAlert("보고서 시안을 볼 프로젝트를 선택해주세요.");
+            return;
+        }
+        const sections = selected.flatMap(project => (intersectionsData[project.id] || []).map(intersection => {
+            const phases = (intersection.phases || []).map((phase, index) => `
+                <tr><td>P${index + 1}</td><td>${escapeHtml(formatPhaseMovements(normalizePhaseMovements(phase)))}</td><td>${escapeHtml(phase.times?.at(-1) ?? '-')}</td><td>${phase.isPermissive ? '비보호' : '-'}</td></tr>`).join('');
+            return `<section class="page"><div class="eyebrow">${escapeHtml(project.name)} · ${escapeHtml(getIntersectionStatus(intersection))}</div><h1>${escapeHtml(intersection.number)}. ${escapeHtml(intersection.name)}</h1><div class="meta"><span>${(intersection.directions || DEFAULT_DIRECTIONS).length}지 교차로</span><span>조사자 ${escapeHtml(intersection.surveyor || '미입력')}</span><span>${escapeHtml(intersection.surveyedAt || formatSavedAt(intersection.savedAt))}</span><span>${escapeHtml(intersection.location ? `${intersection.location.lat.toFixed(6)}, ${intersection.location.lng.toFixed(6)}` : '위치 미입력')}</span></div><div class="map">교차로 위치 지도 영역<div>${escapeHtml((intersection.directions || DEFAULT_DIRECTIONS).join(' · '))}</div></div><table><thead><tr><th>현시</th><th>이동류 구성</th><th>시간(초)</th><th>비고</th></tr></thead><tbody>${phases || '<tr><td colspan="4">현시 정보 없음</td></tr>'}</tbody></table><div class="memo"><b>현장 메모</b><p>${escapeHtml(intersection.memo || '기록 없음')}</p></div><footer>신호 현시 현장조사 · v2.0.0 · ${escapeHtml(new Date().toLocaleString('ko-KR'))}</footer></section>`;
+        })).join('');
+        const preview = window.open('', '_blank');
+        if (!preview) {
+            showAlert('보고서 시안 창을 열 수 없습니다. 팝업 차단을 확인해주세요.');
+            return;
+        }
+        preview.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>신호현시조사 PDF 보고서 시안</title><style>body{margin:0;background:#e9eef7;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#152033}.page{box-sizing:border-box;width:210mm;min-height:297mm;margin:20px auto;padding:18mm;background:#fff;box-shadow:0 20px 60px #23395d22;page-break-after:always}.eyebrow{color:#2563eb;font-weight:700;font-size:12px;letter-spacing:.04em}h1{font-size:28px;margin:8px 0 10px}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{padding:7px 10px;border-radius:999px;background:#eef4ff;font-size:11px}.map{height:86mm;margin:18px 0;border-radius:22px;background:linear-gradient(135deg,#e9f2ff,#d9e8f5);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#54708e;font-weight:700}.map div{margin-top:9px;font-size:12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#162a46;color:white;text-align:left}th,td{padding:10px;border-bottom:1px solid #e5eaf1}.memo{margin-top:18px;padding:14px;border-radius:16px;background:#f7f9fc;font-size:12px}.memo p{margin:6px 0 0;white-space:pre-wrap}footer{margin-top:22px;color:#8995a6;font-size:10px;text-align:right}@media print{body{background:white}.page{margin:0;box-shadow:none}}</style></head><body>${sections || '<section class="page"><h1>교차로 정보 없음</h1></section>'}</body></html>`);
+        preview.document.close();
+    };
+
+    const handleJsonImport = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        setIsImporting(true);
+        try {
+            const backup = JSON.parse(await file.text());
+            if (backup?.schemaVersion !== 1 || !Array.isArray(backup.projects)) throw new Error('지원하지 않는 백업 형식입니다.');
+            const projectsPath = `/artifacts/${appId}/users/${userId}/projects`;
+            let nextOrder = projects.length ? Math.max(...projects.map(project => Number(project.order) || 0)) + 1 : 0;
+            for (const project of backup.projects) {
+                const restoredProject = await addDoc(collection(db, projectsPath), {
+                    name: `${String(project.name || '복원 프로젝트')} (복원)`,
+                    createdAt: new Date(),
+                    restoredAt: new Date(),
+                    order: nextOrder++,
+                });
+                const intersectionsPath = `${projectsPath}/${restoredProject.id}/intersections`;
+                for (const intersection of (project.intersections || [])) {
+                    await addDoc(collection(db, intersectionsPath), {
+                        number: Number(intersection.number) || 1,
+                        name: String(intersection.name || '복원 교차로'),
+                        createdAt: new Date(),
+                        location: intersection.location || null,
+                        mapIcons: intersection.mapIcons || {},
+                        memo: String(intersection.memo || ''),
+                        surveyor: String(intersection.surveyor || ''),
+                        surveyedAt: String(intersection.surveyedAt || currentLocalDateTime()),
+                        phases: Array.isArray(intersection.phases) ? intersection.phases : Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false })),
+                        directions: Array.isArray(intersection.directions) ? intersection.directions : DEFAULT_DIRECTIONS,
+                        savedAt: new Date(),
+                        restoredAt: new Date(),
+                    });
+                }
+            }
+            showToast(`${backup.projects.length}개 프로젝트를 새 항목으로 복원했습니다.`);
+            onClose();
+        } catch (error) {
+            console.error('JSON restore failed:', error);
+            showAlert(`백업 복원 실패: ${error.message}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -292,16 +514,21 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
                         </div>
                     ))}
                 </div>
-                <div className="flex justify-end gap-4 mt-6">
-                    <button onClick={onClose} className="p-2 px-4 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold transition-colors">취소</button>
-                    <button onClick={handleExport} disabled={isLoading} className="p-2 px-4 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors disabled:bg-gray-400">내보내기</button>
+                <div className="mt-5 grid gap-2">
+                    <button onClick={handleXlsxExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400">XLSX로 내보내기</button>
+                    <button onClick={handlePdfPreview} disabled={isLoading} className="min-h-11 rounded-2xl bg-slate-800 px-4 py-2 font-semibold text-white hover:bg-slate-900 disabled:bg-gray-400">PDF 보고서 시안 보기</button>
+                    <button onClick={handleJsonBackup} disabled={isLoading} className="min-h-11 rounded-2xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:bg-gray-400">JSON 전체 백업</button>
+                    <input ref={importInputRef} type="file" accept="application/json,.json" onChange={handleJsonImport} className="hidden" />
+                    <button onClick={() => importInputRef.current?.click()} disabled={isLoading || isImporting} className="min-h-11 rounded-2xl bg-emerald-50 px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-100 disabled:bg-gray-200 dark:bg-emerald-400/10 dark:text-emerald-300">{isImporting ? '백업 복원 중…' : 'JSON 백업 가져오기'}</button>
+                    <button onClick={handleExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-white/60 px-4 py-2 font-semibold text-gray-700 hover:bg-white dark:bg-white/5 dark:text-gray-200">CSV 호환 파일</button>
+                    <button onClick={onClose} className="min-h-11 rounded-2xl px-4 py-2 font-semibold text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5">닫기</button>
                 </div>
             </div>
         </div>
     )
 };
 
-const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, onBackup, onReset }) => {
+const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, soundEnabled, onToggleVibration, onToggleSound, canInstall, onInstall, onBackup, onReset }) => {
     if (!isOpen) return null;
 
     return (
@@ -321,6 +548,17 @@ const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, onBackup
                             </div>
                         </div>
                     </button>
+                    <button onClick={onToggleVibration} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
+                        <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Smartphone size={20}/> 기록 진동</span>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${vibrationEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{vibrationEnabled ? '켜짐' : '꺼짐'}</span>
+                    </button>
+                    <button onClick={onToggleSound} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
+                        <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Volume2 size={20}/> 기록 효과음</span>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${soundEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{soundEnabled ? '켜짐' : '꺼짐'}</span>
+                    </button>
+                    {canInstall && <button onClick={onInstall} className="min-h-12 w-full flex items-center gap-3 rounded-2xl bg-blue-50 p-3 font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-400/10 dark:text-blue-300">
+                        <Download size={20}/> 홈 화면에 앱 설치
+                    </button>}
                     <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>
@@ -394,7 +632,7 @@ export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDi
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div className="glass-modal p-5 sm:p-6 w-full max-w-lg" onClick={event => event.stopPropagation()}>
                 <h3 className="text-lg font-bold dark:text-white">교차로 방향 설정</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">기본 4방향에 대각선 방향을 추가해 5지 이상 교차로를 구성하세요.</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">기본 4방향에 필요한 접근로를 추가하세요. 선택 수가 교차로 지수로 표시됩니다.</p>
                 <div className="mt-5 grid grid-cols-2 gap-3">
                     {DEFAULT_DIRECTIONS.map(direction => (
                         <div key={direction} className="flex items-center gap-3 rounded-2xl border border-white/70 dark:border-white/10 bg-white/55 dark:bg-white/5 px-4 py-3 text-gray-700 dark:text-gray-200">
@@ -404,7 +642,7 @@ export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDi
                     ))}
                 </div>
                 <button type="button" aria-expanded={showDiagonalDirections} onClick={() => setShowDiagonalDirections(value => !value)} className="mt-5 w-full flex items-center justify-between rounded-2xl border border-white/70 dark:border-white/10 bg-white/50 dark:bg-white/5 px-4 py-3 text-sm font-bold text-gray-700 dark:text-gray-200">
-                    <span>5지 이상 교차로 · 대각선 방향 {selectedDiagonalCount ? `${selectedDiagonalCount}개 사용 중` : '추가'}</span>
+                    <span>추가 접근로 · 현재 {selectedDirections.length}지 교차로 {selectedDiagonalCount ? `(${selectedDiagonalCount}개 추가)` : ''}</span>
                     {showDiagonalDirections ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                 </button>
                 {showDiagonalDirections && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
@@ -485,7 +723,7 @@ export const PhaseSelectionModal = ({ directions = DEFAULT_DIRECTIONS, initialMo
     );
 };
 
-const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId }) => {
+const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId, vibrationEnabled, soundEnabled }) => {
     const [details, setDetails] = useState(null);
     const [map, setMap] = useState(null);
     const [mapCenter, setMapCenter] = useState(null); // Separate state for map center to avoid re-rendering map on drag
@@ -493,7 +731,6 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const searchInputRef = useRef(null);
     const mapContainerRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [isSavingLocation, setIsSavingLocation] = useState(false); // New state for location saving
     const [phases, setPhases] = useState([]);
     const [isPhaseModalOpen, setIsPhaseModalOpen] = useState(false);
     const [isDirectionSettingsOpen, setIsDirectionSettingsOpen] = useState(false);
@@ -506,24 +743,62 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [editingTime, setEditingTime] = useState({ index: null, value: '' });
     const [mapIcons, setMapIcons] = useState({});
     const [memo, setMemo] = useState('');
+    const [surveyor, setSurveyor] = useState('');
+    const [surveyedAt, setSurveyedAt] = useState(currentLocalDateTime);
     const markersRef = useRef({});
     const mainMarkerRef = useRef(null); // Ref for the main intersection marker
     const [isDirty, setIsDirty] = useState(false);
     const initialData = useRef(null);
     const [isLocationVisible, setIsLocationVisible] = useState(true);
+    const [spatialSaveState, setSpatialSaveState] = useState('saved');
+    const [lastSavedAt, setLastSavedAt] = useState(null);
+    const wakeLockRef = useRef(null);
+    const hydratedRef = useRef(false);
+    const spatialSaveTimerRef = useRef(null);
     const hasDetails = Boolean(details);
 
     const docRef = useMemo(() => doc(db, `/artifacts/${appId}/users/${userId}/projects/${projectId}/intersections`, intersection.id), [db, appId, userId, projectId, intersection.id]);
+    const draftKey = useMemo(() => `signal-app-draft:${userId}:${projectId}:${intersection.id}`, [userId, projectId, intersection.id]);
+
+    const provideTimerFeedback = useCallback(() => {
+        if (vibrationEnabled && navigator.vibrate) navigator.vibrate(45);
+        if (!soundEnabled) return;
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            const context = new AudioContextClass();
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, context.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.09);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.1);
+            oscillator.addEventListener('ended', () => context.close());
+        } catch (error) {
+            console.warn('Timer sound is unavailable:', error);
+        }
+    }, [soundEnabled, vibrationEnabled]);
 
     const handleSaveAll = async () => {
         setIsSaving(true);
         try {
+            const savedAt = new Date();
             const dataToSave = {
                 location: mapCenter, // Save the current map center
                 mapIcons: mapIcons,
                 memo: memo,
+                surveyor,
+                surveyedAt,
                 phases: phases,
                 directions: directions,
+                savedAt,
+                updatedAt: savedAt,
+                surveyStatus: getIntersectionStatus({ ...details, location: mapCenter, phases }),
             };
             await updateDoc(docRef, dataToSave);
             
@@ -531,42 +806,20 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 location: mapCenter,
                 mapIcons: mapIcons,
                 memo: memo,
+                surveyor,
+                surveyedAt,
                 phases: phases,
                 directions: directions,
             };
             setIsDirty(false);
-            showAlert("모든 변경사항이 저장되었습니다.");
+            setLastSavedAt(savedAt);
+            localStorage.removeItem(draftKey);
+            showToast(navigator.onLine ? "모든 변경사항을 저장했습니다." : "기기에 저장했습니다. 연결되면 자동 동기화됩니다.");
         } catch (error) {
             console.error("Failed to save data:", error);
-            showAlert("저장에 실패했습니다.");
+            showToast("저장에 실패했습니다.", 'error');
         } finally {
             setIsSaving(false);
-        }
-    };
-
-    // *** NEW FUNCTION: Save only location and icons ***
-    const handleSaveLocation = async () => {
-        if (!map) return;
-        setIsSavingLocation(true);
-        try {
-            const newLocation = map.getCenter().toJSON();
-            await updateDoc(docRef, {
-                location: newLocation,
-                mapIcons: mapIcons,
-            });
-            // Update the local state to match saved data
-            setMapCenter(newLocation); 
-            // Update the initial data snapshot to prevent "isDirty" from being true
-            if(initialData.current) {
-                initialData.current.location = newLocation;
-                initialData.current.mapIcons = mapIcons;
-            }
-            showAlert("교차로 위치와 아이콘이 저장되었습니다.");
-        } catch (error) {
-            console.error("Failed to save location:", error);
-            showAlert("위치 저장에 실패했습니다.");
-        } finally {
-            setIsSavingLocation(false);
         }
     };
 
@@ -575,7 +828,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             showConfirm(
                 "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?",
                 () => { handleSaveAll().then(onBack) }, // Save and go back
-                onBack, // Don't save and go back
+                () => { localStorage.removeItem(draftKey); onBack(); }, // Don't save and go back
                 () => {} // Cancel
             );
         } else {
@@ -588,35 +841,46 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             if (doc.exists()) {
                 const data = doc.data();
                 setDetails(data);
+                setLastSavedAt(data.savedAt || null);
                 if (data.location) {
                     setMapCenter(data.location);
                 }
                 setMapIcons(data.mapIcons || {});
-                setMemo(data.memo || '');
                 const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false }))).map(p => ({
                     movements: normalizePhaseMovements(p),
                     times: Array.isArray(p.times) ? p.times : [],
                     isPermissive: p.isPermissive || false
                 }));
-                setPhases(validPhases);
                 const directionsInUse = [
                     ...validPhases.flatMap(phase => phase.movements.map(movement => movement.direction)),
                     ...Object.keys(data.mapIcons || {})
                 ];
                 const savedDirections = Array.isArray(data.directions) ? data.directions : [];
                 const validDirections = ALL_DIRECTIONS.filter(direction => DEFAULT_DIRECTIONS.includes(direction) || savedDirections.includes(direction) || directionsInUse.includes(direction));
-                setDirections(validDirections);
                 
                 const initialSnapshot = { 
                     location: data.location, 
                     mapIcons: data.mapIcons || {}, 
                     memo: data.memo || '',
+                    surveyor: data.surveyor || '',
+                    surveyedAt: data.surveyedAt || currentLocalDateTime(),
                     phases: validPhases,
                     directions: validDirections,
                 };
                 if (!initialData.current) {
                     initialData.current = initialSnapshot;
+                    let draft = null;
+                    try { draft = JSON.parse(localStorage.getItem(draftKey)); } catch (error) { localStorage.removeItem(draftKey); }
+                    const serverSavedAt = data.savedAt?.toDate ? data.savedAt.toDate().getTime() : new Date(data.savedAt || 0).getTime();
+                    const shouldRestoreDraft = draft && Number(draft.updatedAt) > serverSavedAt;
+                    setMemo(shouldRestoreDraft ? draft.memo : (data.memo || ''));
+                    setSurveyor(shouldRestoreDraft ? (draft.surveyor || '') : (data.surveyor || ''));
+                    setSurveyedAt(shouldRestoreDraft ? (draft.surveyedAt || currentLocalDateTime()) : (data.surveyedAt || currentLocalDateTime()));
+                    setPhases(shouldRestoreDraft ? draft.phases : validPhases);
+                    setDirections(shouldRestoreDraft ? draft.directions : validDirections);
+                    if (shouldRestoreDraft) showToast('저장 전 현장 기록을 복구했습니다.');
                 }
+                hydratedRef.current = true;
             } else {
                 console.warn(`Intersection document (${docRef.path}) no longer exists. Navigating back.`);
                 showAlert("교차로 데이터가 삭제되었거나 찾을 수 없습니다. 목록으로 돌아갑니다.");
@@ -624,18 +888,51 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             }
         });
         return () => unsub();
-    }, [docRef, onBack]);
+    }, [docRef, draftKey, onBack]);
+
+    useEffect(() => {
+        if (!hydratedRef.current || !initialData.current) return;
+        const hasDraftChanges = initialData.current.memo !== memo
+            || initialData.current.surveyor !== surveyor
+            || initialData.current.surveyedAt !== surveyedAt
+            || JSON.stringify(initialData.current.phases) !== JSON.stringify(phases)
+            || JSON.stringify(initialData.current.directions) !== JSON.stringify(directions);
+        if (hasDraftChanges) {
+            localStorage.setItem(draftKey, JSON.stringify({ memo, surveyor, surveyedAt, phases, directions, updatedAt: Date.now() }));
+        }
+    }, [draftKey, memo, surveyor, surveyedAt, phases, directions]);
+
+    useEffect(() => {
+        if (!hydratedRef.current || !mapCenter) return undefined;
+        setSpatialSaveState('saving');
+        if (spatialSaveTimerRef.current) window.clearTimeout(spatialSaveTimerRef.current);
+        spatialSaveTimerRef.current = window.setTimeout(async () => {
+            try {
+                const spatialUpdatedAt = new Date();
+                await updateDoc(docRef, { location: mapCenter, mapIcons, spatialUpdatedAt });
+                if (initialData.current) {
+                    initialData.current.location = mapCenter;
+                    initialData.current.mapIcons = mapIcons;
+                }
+                setSpatialSaveState('saved');
+            } catch (error) {
+                console.error('Failed to save spatial data:', error);
+                setSpatialSaveState('error');
+            }
+        }, 650);
+        return () => window.clearTimeout(spatialSaveTimerRef.current);
+    }, [docRef, mapCenter, mapIcons]);
 
     useEffect(() => {
         if (initialData.current) {
-            const locationChanged = JSON.stringify(initialData.current.location) !== JSON.stringify(mapCenter);
-            const iconsChanged = JSON.stringify(initialData.current.mapIcons) !== JSON.stringify(mapIcons);
             const memoChanged = initialData.current.memo !== memo;
+            const surveyorChanged = initialData.current.surveyor !== surveyor;
+            const surveyedAtChanged = initialData.current.surveyedAt !== surveyedAt;
             const phasesChanged = JSON.stringify(initialData.current.phases) !== JSON.stringify(phases);
             const directionsChanged = JSON.stringify(initialData.current.directions) !== JSON.stringify(directions);
-            setIsDirty(locationChanged || iconsChanged || memoChanged || phasesChanged || directionsChanged);
+            setIsDirty(memoChanged || surveyorChanged || surveyedAtChanged || phasesChanged || directionsChanged);
         }
-    }, [mapCenter, mapIcons, memo, phases, directions]);
+    }, [mapCenter, mapIcons, memo, surveyor, surveyedAt, phases, directions]);
 
     useEffect(() => {
         const handleBeforeUnload = (e) => {
@@ -647,6 +944,27 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [isDirty]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const syncWakeLock = async () => {
+            if (!timer.active || !('wakeLock' in navigator)) return;
+            try {
+                wakeLockRef.current = await navigator.wakeLock.request('screen');
+                if (cancelled && wakeLockRef.current) await wakeLockRef.current.release();
+            } catch (error) {
+                console.warn('Screen wake lock is unavailable:', error);
+            }
+        };
+        syncWakeLock();
+        return () => {
+            cancelled = true;
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release().catch(() => {});
+                wakeLockRef.current = null;
+            }
+        };
+    }, [timer.active]);
 
     useEffect(() => {
         const mapContainer = mapContainerRef.current;
@@ -675,6 +993,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 if (mainMarkerRef.current) {
                     mainMarkerRef.current.setPosition(newCenter);
                 }
+            });
+            gMap.addListener('idle', () => {
+                const center = gMap.getCenter();
+                if (center) setMapCenter(center.toJSON());
             });
 
             if (searchInputRef.current) {
@@ -828,6 +1150,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             newPhases[index].times.push(finalTime);
             updatePhases(newPhases);
         } else if (!timer.active) {
+            provideTimerFeedback();
             startTimer(index);
         }
     };
@@ -847,6 +1170,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         } else {
             setIsRecordModeActive(true);
             setCurrentRecordingPhaseIndex(0);
+            provideTimerFeedback();
             startTimer(0);
         }
     };
@@ -858,6 +1182,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         if (!Array.isArray(newPhases[currentRecordingPhaseIndex].times)) newPhases[currentRecordingPhaseIndex].times = [];
         newPhases[currentRecordingPhaseIndex].times.push(finalTime);
         updatePhases(newPhases);
+        provideTimerFeedback();
         const nextIndex = currentRecordingPhaseIndex + 1;
         if (nextIndex < phases.length) {
             setCurrentRecordingPhaseIndex(nextIndex);
@@ -927,6 +1252,15 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-center mt-2 truncate">{details.number}. {details.name}</h1>
             </header>
 
+            <section className="content-surface mb-4 grid gap-3 p-3 sm:grid-cols-2 sm:p-4" aria-label="조사 기본정보">
+                <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">조사자
+                    <input value={surveyor} onChange={event => setSurveyor(event.target.value)} placeholder="조사자 이름" className="mt-1 min-h-11 w-full rounded-2xl border border-white/70 bg-white/60 px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </label>
+                <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">조사 일시
+                    <input type="datetime-local" value={surveyedAt} onChange={event => setSurveyedAt(event.target.value)} className="mt-1 min-h-11 w-full rounded-2xl border border-white/70 bg-white/60 px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </label>
+            </section>
+
             <section className="mb-5 sm:mb-8">
                  <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><MapPin size={24} className="text-blue-500" /> 교차로 위치</h2>
@@ -977,24 +1311,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 </div>
                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">지도에 추가된 아이콘은 드래그하여 위치를 옮길 수 있습니다.</p>
                             </div>
-                            {/* *** NEW BUTTON: Save Location *** */}
-                            <button 
-                                onClick={handleSaveLocation} 
-                                disabled={isSavingLocation}
-                                className="soft-button w-full mt-4 p-3 bg-teal-500 text-white font-semibold hover:bg-teal-600 flex items-center justify-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                            >
-                                {isSavingLocation ? (
-                                    <>
-                                        <RefreshCw size={18} className="animate-spin" />
-                                        <span>저장 중...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle size={18} />
-                                        <span>교차로 위치 저장</span>
-                                    </>
-                                )}
-                            </button>
+                            <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
+                                {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
+                                {spatialSaveState === 'saving' ? '위치·방향을 저장하는 중' : spatialSaveState === 'error' ? '위치 저장 실패 · 다시 움직여 재시도' : '위치·방향은 실시간 저장됨'}
+                            </div>
                         </div>
                     </>
                 )}
@@ -1135,7 +1455,11 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             </section>
             
             <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-3xl rounded-[1.4rem] border border-white/70 dark:border-white/10 bg-white/80 dark:bg-[#151922]/92 p-2 shadow-[0_16px_45px_rgba(30,64,175,0.24)] backdrop-blur-xl">
-                <button onClick={handleSaveAll} disabled={isSaving || isSavingLocation} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
+                <div className="mb-1 flex items-center justify-between px-2 text-[11px] text-gray-600 dark:text-gray-300">
+                    <span className={`font-bold ${getIntersectionStatus({ ...details, location: mapCenter, phases }) === '조사완료' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300'}`}>{getIntersectionStatus({ ...details, location: mapCenter, phases })}</span>
+                    <span>마지막 저장 {formatSavedAt(lastSavedAt)}</span>
+                </div>
+                <button onClick={handleSaveAll} disabled={isSaving} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
                     <Save size={20} />
                     {isSaving ? '저장 중...' : isDirty ? '모든 변경사항 저장 · 변경됨' : '모든 변경사항 저장'}
                 </button>
@@ -1172,6 +1496,7 @@ export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
 
             markersRef.current = locatedIntersections.map(intersection => {
                 bounds.extend(intersection.location);
+                const isComplete = getIntersectionStatus(intersection) === '조사완료';
                 const marker = new window.google.maps.Marker({
                     position: intersection.location,
                     map,
@@ -1185,7 +1510,7 @@ export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
                     icon: {
                         path: window.google.maps.SymbolPath.CIRCLE,
                         scale: 18,
-                        fillColor: '#2563eb',
+                        fillColor: isComplete ? '#059669' : '#d97706',
                         fillOpacity: 0.95,
                         strokeColor: '#ffffff',
                         strokeWeight: 3,
@@ -1217,7 +1542,7 @@ export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/60 dark:border-white/10">
                 <div>
                     <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> 교차로 위치 지도</h2>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">번호 표지를 누르면 해당 교차로로 이동합니다.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">번호 표지를 누르면 이동합니다. 초록은 조사완료, 주황은 조사필요입니다.</p>
                 </div>
                 <span className="flex-shrink-0 rounded-full bg-blue-100 dark:bg-blue-400/15 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">위치 {locatedIntersections.length}/{intersections.length}</span>
             </div>
@@ -1349,11 +1674,12 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-4 cursor-pointer" onClick={() => onSelect(intersection)}>
-                                                <div className="flex-shrink-0 w-12 h-12 bg-blue-100/80 dark:bg-blue-400/15 text-blue-700 dark:text-blue-300 font-bold rounded-2xl flex items-center justify-center text-lg">{intersection.number}</div>
+                                                <div className={`flex-shrink-0 w-12 h-12 font-bold rounded-2xl flex items-center justify-center text-lg ${getIntersectionStatus(intersection) === '조사완료' ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300' : 'bg-amber-100/90 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300'}`}>{intersection.number}</div>
                                                 <div className="flex-grow">
                                                     <p className="font-semibold text-lg text-gray-800 dark:text-gray-200">{intersection.name}</p>
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400">클릭하여 상세 정보 보기</p>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">{getIntersectionStatus(intersection)} · {intersection.directions?.length || DEFAULT_DIRECTIONS.length}지 교차로</p>
                                                 </div>
+                                                <button type="button" aria-label={`${intersection.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[intersection.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(intersection.id); }} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
                                             </div>
                                         )}
                                     </div>
@@ -1487,6 +1813,7 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                                                 <div className="flex items-center gap-1">
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'up'); }} disabled={index === 0} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowUp size={18} /></button>
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'down'); }} disabled={index === projects.length - 1} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowDown size={18} /></button>
+                                                    <button type="button" aria-label={`${project.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[project.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(project.id); }} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
                                                 </div>
                                             </div>
                                         )}
@@ -1520,13 +1847,20 @@ export default function App() {
     // Settings State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [vibrationEnabled, setVibrationEnabled] = useState(true);
+    const [soundEnabled, setSoundEnabled] = useState(true);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [installPrompt, setInstallPrompt] = useState(null);
+    const [updateRegistration, setUpdateRegistration] = useState(null);
     
     const [view, setView] = useState('projects'); // 'projects', 'intersections', 'detail'
 
     useEffect(() => {
         const savedDarkMode = localStorage.getItem('darkMode') === 'true';
         setIsDarkMode(savedDarkMode);
+        setVibrationEnabled(localStorage.getItem('timerVibration') !== 'false');
+        setSoundEnabled(localStorage.getItem('timerSound') !== 'false');
     }, []);
 
     useEffect(() => {
@@ -1539,9 +1873,50 @@ export default function App() {
     }, [isDarkMode]);
 
     useEffect(() => {
+        const updateConnection = () => setIsOnline(navigator.onLine);
+        window.addEventListener('online', updateConnection);
+        window.addEventListener('offline', updateConnection);
+        return () => {
+            window.removeEventListener('online', updateConnection);
+            window.removeEventListener('offline', updateConnection);
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleInstallPrompt = event => {
+            event.preventDefault();
+            setInstallPrompt(event);
+        };
+        const handleAppInstalled = () => setInstallPrompt(null);
+        const handleUpdate = event => setUpdateRegistration(event.detail);
+        window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+        window.addEventListener('appinstalled', handleAppInstalled);
+        window.addEventListener('signal-app-update', handleUpdate);
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+            window.removeEventListener('appinstalled', handleAppInstalled);
+            window.removeEventListener('signal-app-update', handleUpdate);
+        };
+    }, []);
+
+    const handleInstallApp = async () => {
+        if (!installPrompt) return;
+        await installPrompt.prompt();
+        await installPrompt.userChoice;
+        setInstallPrompt(null);
+    };
+
+    const handleApplyUpdate = () => {
+        const waiting = updateRegistration?.waiting;
+        if (!waiting) return;
+        navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+        waiting.postMessage('SKIP_WAITING');
+    };
+
+    useEffect(() => {
         try {
             const app = initializeApp(firebaseConfig);
-            const firestoreDb = getFirestore(app);
+            const firestoreDb = createFirestore(app);
             const firebaseAuth = getAuth(app);
             setDb(firestoreDb);
             setAuth(firebaseAuth);
@@ -1696,7 +2071,10 @@ export default function App() {
             directions: DEFAULT_DIRECTIONS,
             location: null,
             mapIcons: {},
-            memo: ''
+            memo: '',
+            surveyor: '',
+            surveyedAt: currentLocalDateTime(),
+            surveyStatus: '조사필요'
         });
     };
 
@@ -1763,6 +2141,20 @@ export default function App() {
                 onClose={() => setIsSettingsOpen(false)}
                 isDarkMode={isDarkMode}
                 onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+                vibrationEnabled={vibrationEnabled}
+                soundEnabled={soundEnabled}
+                onToggleVibration={() => setVibrationEnabled(value => {
+                    const next = !value;
+                    localStorage.setItem('timerVibration', String(next));
+                    return next;
+                })}
+                onToggleSound={() => setSoundEnabled(value => {
+                    const next = !value;
+                    localStorage.setItem('timerSound', String(next));
+                    return next;
+                })}
+                canInstall={Boolean(installPrompt)}
+                onInstall={handleInstallApp}
                 onBackup={() => { setIsSettingsOpen(false); setIsExportModalOpen(true); }}
                 onReset={handleResetApp}
             />
@@ -1779,6 +2171,8 @@ export default function App() {
                     <Settings size={24} />
                 </button>
             </div>
+            {!isOnline && <div className="fixed left-1/2 top-3 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인 · 기기에 임시 저장</div>}
+            {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전을 사용할 수 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
 
             <main className="pb-20">
                 {view === 'projects' && (
@@ -1809,6 +2203,8 @@ export default function App() {
                         appId={appId}
                         projectId={selectedProjectId}
                         onBack={backToIntersections}
+                        vibrationEnabled={vibrationEnabled}
+                        soundEnabled={soundEnabled}
                     />
                 )}
             </main>

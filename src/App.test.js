@@ -9,7 +9,10 @@ import {
   PhaseSelectionModal,
   ProjectIntersectionMap,
   buildExportCsv,
+  buildWorkbookData,
   formatPhaseMovements,
+  formatSavedAt,
+  getIntersectionStatus,
   normalizePhaseMovements,
   reattachMapMarker,
 } from './App';
@@ -56,15 +59,37 @@ test('renders permissive left turns in amber and protected movements in green', 
   expect(screen.getByText('SB 좌회전')).toHaveClass('text-amber-700');
 });
 
-test('adds diagonal approaches for five-leg and larger intersections', () => {
+test('adds diagonal approaches and reports an exact intersection leg count', () => {
   const onSave = jest.fn();
   render(<DirectionSettingsModal directions={['SB', 'NB', 'EB', 'WB']} onSave={onSave} onClose={() => {}} />);
   expect(screen.queryByRole('button', { name: 'SWB 방향 추가' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /5지 이상 교차로/ }));
+  fireEvent.click(screen.getByRole('button', { name: /추가 접근로/ }));
   fireEvent.click(screen.getByRole('button', { name: 'SWB 방향 추가' }));
   fireEvent.click(screen.getByRole('button', { name: 'SEB 방향 추가' }));
   fireEvent.click(screen.getByRole('button', { name: '방향 적용' }));
   expect(onSave).toHaveBeenCalledWith(['SB', 'SWB', 'WB', 'NB', 'EB', 'SEB']);
+});
+
+test('preserves valid duplicate movements used by special intersections', () => {
+  expect(normalizePhaseMovements({ movements: [
+    { direction: 'SB', type: '직진' },
+    { direction: 'SB', type: '직진' },
+  ] })).toEqual([
+    { direction: 'SB', type: '직진' },
+    { direction: 'SB', type: '직진' },
+  ]);
+});
+
+test('marks an intersection complete only when identity, location and every phase time are present', () => {
+  const base = { number: 1, name: '시청', location: { lat: 37.5, lng: 127 } };
+  expect(getIntersectionStatus({ ...base, phases: [{ movements: [], times: [3] }] })).toBe('조사완료');
+  expect(getIntersectionStatus({ ...base, phases: [{ movements: [], times: [] }] })).toBe('조사필요');
+  expect(getIntersectionStatus({ ...base, location: null, phases: [{ movements: [], times: [3] }] })).toBe('조사필요');
+});
+
+test('formats last saved time down to seconds', () => {
+  expect(formatSavedAt(new Date('2026-09-19T03:04:05Z'))).toMatch(/05/);
+  expect(formatSavedAt(null)).toBe('아직 저장되지 않음');
 });
 
 test('supports diagonal movements in phase data and selection grids', () => {
@@ -94,6 +119,18 @@ test('exports complete Korean CSV data with safe quotes and field details', () =
   expect(csv).toContain('"SB 직진"');
   expect(csv).toContain('"12.3 · 12.8"');
   expect(csv).toContain('"쉼표, 따옴표 ""확인"""');
+});
+
+test('normalizes XLSX export into separate phase, observation and movement rows', () => {
+  const tables = buildWorkbookData(
+    [{ id: 'p1', name: '현장조사' }],
+    { p1: [{ id: 'i1', number: 1, name: '시청', location: { lat: 37.5, lng: 127 }, phases: [{ movements: [{ direction: 'SB', type: '직진' }], times: [10, 11] }] }] },
+    { p1: true },
+  );
+  expect(tables.교차로).toHaveLength(1);
+  expect(tables.현시).toHaveLength(1);
+  expect(tables.시간관측).toHaveLength(2);
+  expect(tables.이동류).toEqual([expect.objectContaining({ 방향: 'SB', 이동류: '직진' })]);
 });
 
 test('keeps intersection edit actions hidden until a real left swipe', () => {

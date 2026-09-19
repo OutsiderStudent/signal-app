@@ -11,6 +11,22 @@ root.render(
   </React.StrictMode>
 );
 
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${process.env.PUBLIC_URL}/service-worker.js`).then(registration => {
+      if (registration.waiting) window.dispatchEvent(new CustomEvent('signal-app-update', { detail: registration }));
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing;
+        worker?.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+            window.dispatchEvent(new CustomEvent('signal-app-update', { detail: registration }));
+          }
+        });
+      });
+    }).catch(error => console.warn('Service worker registration failed:', error));
+  });
+}
+
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals

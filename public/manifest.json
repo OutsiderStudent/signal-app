@@ -1,6 +1,7 @@
 {
   "short_name": "신호현시조사",
   "name": "신호 현시 현장조사 앱",
+  "id": "/",
   "icons": [
     {
       "src": "signal-app-icon.png",
@@ -8,8 +9,12 @@
       "type": "image/png"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "ko-KR",
+  "description": "교차로 위치, 접근로 방향, 신호 현시와 시간을 현장에서 기록합니다.",
   "theme_color": "#2563eb",
   "background_color": "#f9fafb"
 }
