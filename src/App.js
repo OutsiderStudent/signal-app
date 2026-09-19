@@ -145,6 +145,19 @@ export const getIntersectionStatus = (intersection = {}) => {
     return hasIdentity && hasLocation && hasCompletePhases ? '조사완료' : '조사필요';
 };
 
+export const areCoordinatesEqual = (left, right, tolerance = 0.0000001) => {
+    if (!left || !right) return left === right;
+    return Math.abs(Number(left.lat) - Number(right.lat)) <= tolerance
+        && Math.abs(Number(left.lng) - Number(right.lng)) <= tolerance;
+};
+
+export const areMapIconsEqual = (left = {}, right = {}) => {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length
+        && leftKeys.every((key, index) => key === rightKeys[index] && areCoordinatesEqual(left[key], right[key]));
+};
+
 const showToast = (message, tone = 'success') => {
     const toast = document.createElement('div');
     toast.setAttribute('role', 'status');
@@ -755,6 +768,8 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const wakeLockRef = useRef(null);
     const hydratedRef = useRef(false);
     const spatialSaveTimerRef = useRef(null);
+    const lastSyncedSpatialRef = useRef({ location: null, mapIcons: {} });
+    const spatialSaveVersionRef = useRef(0);
     const hasDetails = Boolean(details);
 
     const docRef = useMemo(() => doc(db, `/artifacts/${appId}/users/${userId}/projects/${projectId}/intersections`, intersection.id), [db, appId, userId, projectId, intersection.id]);
@@ -842,10 +857,13 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 const data = doc.data();
                 setDetails(data);
                 setLastSavedAt(data.savedAt || null);
-                if (data.location) {
-                    setMapCenter(data.location);
+                const remoteLocation = data.location || null;
+                const remoteMapIcons = data.mapIcons || {};
+                lastSyncedSpatialRef.current = { location: remoteLocation, mapIcons: remoteMapIcons };
+                if (remoteLocation) {
+                    setMapCenter(previous => areCoordinatesEqual(previous, remoteLocation) ? previous : remoteLocation);
                 }
-                setMapIcons(data.mapIcons || {});
+                setMapIcons(previous => areMapIconsEqual(previous, remoteMapIcons) ? previous : remoteMapIcons);
                 const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false }))).map(p => ({
                     movements: normalizePhaseMovements(p),
                     times: Array.isArray(p.times) ? p.times : [],
@@ -904,21 +922,38 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     useEffect(() => {
         if (!hydratedRef.current || !mapCenter) return undefined;
+        const lastSynced = lastSyncedSpatialRef.current;
+        if (areCoordinatesEqual(lastSynced.location, mapCenter) && areMapIconsEqual(lastSynced.mapIcons, mapIcons)) {
+            setSpatialSaveState(navigator.onLine ? 'saved' : 'offline');
+            return undefined;
+        }
+        const saveVersion = ++spatialSaveVersionRef.current;
         setSpatialSaveState('saving');
         if (spatialSaveTimerRef.current) window.clearTimeout(spatialSaveTimerRef.current);
-        spatialSaveTimerRef.current = window.setTimeout(async () => {
-            try {
-                const spatialUpdatedAt = new Date();
-                await updateDoc(docRef, { location: mapCenter, mapIcons, spatialUpdatedAt });
+        spatialSaveTimerRef.current = window.setTimeout(() => {
+            const spatialUpdatedAt = new Date();
+            const pendingWrite = updateDoc(docRef, { location: mapCenter, mapIcons, spatialUpdatedAt });
+            if (!navigator.onLine && saveVersion === spatialSaveVersionRef.current) {
+                lastSyncedSpatialRef.current = { location: mapCenter, mapIcons };
+                if (initialData.current) {
+                    initialData.current.location = mapCenter;
+                    initialData.current.mapIcons = mapIcons;
+                }
+                setSpatialSaveState('offline');
+            }
+            pendingWrite.then(() => {
+                if (saveVersion !== spatialSaveVersionRef.current) return;
+                lastSyncedSpatialRef.current = { location: mapCenter, mapIcons };
                 if (initialData.current) {
                     initialData.current.location = mapCenter;
                     initialData.current.mapIcons = mapIcons;
                 }
                 setSpatialSaveState('saved');
-            } catch (error) {
+            }).catch(error => {
+                if (saveVersion !== spatialSaveVersionRef.current) return;
                 console.error('Failed to save spatial data:', error);
                 setSpatialSaveState('error');
-            }
+            });
         }, 650);
         return () => window.clearTimeout(spatialSaveTimerRef.current);
     }, [docRef, mapCenter, mapIcons]);
@@ -996,7 +1031,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             });
             gMap.addListener('idle', () => {
                 const center = gMap.getCenter();
-                if (center) setMapCenter(center.toJSON());
+                if (center) {
+                    const nextCenter = center.toJSON();
+                    setMapCenter(previous => areCoordinatesEqual(previous, nextCenter) ? previous : nextCenter);
+                }
             });
 
             if (searchInputRef.current) {
@@ -1311,9 +1349,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 </div>
                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">지도에 추가된 아이콘은 드래그하여 위치를 옮길 수 있습니다.</p>
                             </div>
-                            <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
-                                {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
-                                {spatialSaveState === 'saving' ? '위치·방향을 저장하는 중' : spatialSaveState === 'error' ? '위치 저장 실패 · 다시 움직여 재시도' : '위치·방향은 실시간 저장됨'}
+                            <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : spatialSaveState === 'offline' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
+                                {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' || spatialSaveState === 'offline' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
+                                {spatialSaveState === 'saving' ? '위치·방향을 저장하는 중' : spatialSaveState === 'error' ? '위치 저장 실패 · 다시 움직여 재시도' : spatialSaveState === 'offline' ? '기기에 저장됨 · 연결 시 동기화' : '위치·방향 실시간 저장 완료'}
                             </div>
                         </div>
                     </>

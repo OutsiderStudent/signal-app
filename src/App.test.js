@@ -10,6 +10,8 @@ import {
   ProjectIntersectionMap,
   buildExportCsv,
   buildWorkbookData,
+  areCoordinatesEqual,
+  areMapIconsEqual,
   formatPhaseMovements,
   formatSavedAt,
   getIntersectionStatus,
@@ -187,4 +189,19 @@ test('reattaches direction markers when the map instance is refreshed after savi
 
   expect(marker.setPosition).toHaveBeenCalledWith(position);
   expect(marker.setMap).toHaveBeenCalledWith(map);
+});
+
+test('treats Firestore coordinate echoes as unchanged to prevent save loops', () => {
+  expect(areCoordinatesEqual(
+    { lat: 37.56650000001, lng: 126.97800000001 },
+    { lat: 37.5665, lng: 126.978 },
+  )).toBe(true);
+  expect(areCoordinatesEqual({ lat: 37.5665, lng: 126.978 }, { lat: 37.567, lng: 126.978 })).toBe(false);
+});
+
+test('compares direction marker positions independent of object key order', () => {
+  expect(areMapIconsEqual(
+    { SB: { lat: 37.5, lng: 127 }, NB: { lat: 37.51, lng: 127.01 } },
+    { NB: { lat: 37.51, lng: 127.01 }, SB: { lat: 37.5, lng: 127 } },
+  )).toBe(true);
 });
