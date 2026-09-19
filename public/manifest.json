@@ -1,6 +1,6 @@
 {
-  "short_name": "Signal App",
-  "name": "Signal Phase Investigation App",
+  "short_name": "신호현시조사",
+  "name": "신호 현시 현장조사 앱",
   "icons": [
     {
       "src": "signal-app-icon.png",
@@ -10,6 +10,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#2563eb",
+  "background_color": "#f9fafb"
 }

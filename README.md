@@ -1,70 +1,54 @@
-# Getting Started with Create React App
+# Signal Phase Investigation App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+현장에서 교차로 위치, 접근 방향, 신호 현시 이동류, 현시 시간과 메모를 기록하는 React 웹앱입니다.
 
-## Available Scripts
+## 주요 기능
 
-In the project directory, you can run:
+- Google 일반/위성지도와 방향 마커
+- 기본 4방향 및 5지 이상 교차로용 대각선 방향
+- 방향별 직진·좌회전·우회전 조합 현시
+- 개별/연속 현시 시간 기록
+- Firebase 익명 인증과 Firestore 저장
+- 프로젝트별 CSV 내보내기
+- 모바일 반응형 UI 및 다크 모드
 
-### `npm start`
+## 로컬 실행
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Node.js 22와 npm을 사용합니다.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+npm ci
+npm start
+```
 
-### `npm test`
+테스트와 프로덕션 빌드:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+npm test -- --watchAll=false
+npm run build
+```
 
-### `npm run build`
+## 웹 배포
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- 소스 저장소: GitHub `OutsiderStudent/signal-app`
+- 호스팅: Netlify
+- 운영 URL: <https://signal-app-nyh.netlify.app>
+- 운영 브랜치: `main`
+- 빌드 명령: `npm run build`
+- 배포 폴더: `build`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+`main` 브랜치에 푸시하면 연결된 Netlify 프로젝트가 자동으로 빌드·배포합니다. 빌드 설정, SPA fallback, 응답 헤더는 `netlify.toml`에서 관리합니다.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 배포 전 점검
 
-### `npm run eject`
+1. 테스트와 프로덕션 빌드가 통과하는지 확인합니다.
+2. Google Maps API 키의 HTTP referrer에 운영 도메인을 등록합니다.
+3. Firebase Authentication의 익명 로그인을 활성화하고 운영 도메인을 허용합니다.
+4. Firestore Security Rules가 사용자 UID별 데이터만 허용하는지 확인합니다.
+5. Netlify Deploy Preview를 확인한 뒤 `main`에 병합합니다.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Firebase 웹 구성값은 클라이언트 식별 정보입니다. 실제 데이터 접근 통제는 Firestore Security Rules와 Firebase App Check로 관리해야 합니다. Google Maps 키는 Firebase 키와 분리하고 Maps/Places API 및 허용 도메인으로 제한합니다.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## 모바일 앱
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+현재 저장소에는 Capacitor 또는 Android 네이티브 프로젝트가 포함되어 있지 않습니다. APK/AAB 배포는 Capacitor 도입과 권한·서명·업데이트 정책을 별도 설계한 뒤 진행합니다.

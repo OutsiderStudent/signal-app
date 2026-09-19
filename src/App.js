@@ -3,11 +3,14 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Compass, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal } from 'lucide-react';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
 const GOOGLE_MAPS_API_KEY = 'AIzaSyBNuLXPG9x36nEEKotOMjaDn8tnPV_Net4';
+const isGoogleMapsApiKeyConfigured = Boolean(
+    GOOGLE_MAPS_API_KEY && !GOOGLE_MAPS_API_KEY.includes('YOUR_GOOGLE_MAPS_API_KEY')
+);
 
 // --- Firebase Configuration ---
 const localFirebaseConfig = {
@@ -29,9 +32,9 @@ const showAlert = (message) => {
     const modalId = `alert-modal-${Date.now()}`;
     const modal = document.createElement('div');
     modal.id = modalId;
-    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4";
+    modal.className = "glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4";
     modal.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+        <div class="glass-modal p-6 w-full max-w-sm text-center">
             <p class="text-gray-800 dark:text-gray-200">${message}</p>
             <button id="okButton-${modalId}" class="mt-6 w-full p-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">확인</button>
         </div>
@@ -47,9 +50,9 @@ const showConfirm = (message, onConfirm, onDeny, onCancel) => {
     const modalId = `confirm-modal-${Date.now()}`;
     const modal = document.createElement('div');
     modal.id = modalId;
-    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4";
+    modal.className = "glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4";
     modal.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+        <div class="glass-modal p-6 w-full max-w-sm text-center">
             <p class="text-gray-800 dark:text-gray-200">${message}</p>
             <div class="flex justify-end gap-4 mt-6">
                 ${onCancel ? `<button id="cancelBtn-${modalId}" class="p-2 px-4 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold transition-colors">취소</button>` : ''}
@@ -101,6 +104,117 @@ const loadGoogleMapsScript = (callback) => {
     }
 };
 
+export const ALL_DIRECTIONS = ['SB', 'SWB', 'WB', 'NWB', 'NB', 'NEB', 'EB', 'SEB'];
+export const DEFAULT_DIRECTIONS = ['SB', 'NB', 'EB', 'WB'];
+export const MOVEMENT_DIRECTIONS = ALL_DIRECTIONS;
+export const MOVEMENT_TYPES = ['직진', '좌회전', '우회전'];
+
+const directionRotation = { NB: 0, NEB: 45, EB: 90, SEB: 135, SB: 180, SWB: -135, WB: -90, NWB: -45 };
+const oppositeDirection = { SB: 'NB', SWB: 'NEB', WB: 'EB', NWB: 'SEB', NB: 'SB', NEB: 'SWB', EB: 'WB', SEB: 'NWB' };
+
+export const MovementArrowIcon = ({ direction, type, className = 'h-9 w-9' }) => {
+    const rotation = directionRotation[direction] ?? 0;
+    return (
+        <svg viewBox="0 0 24 24" className={className} role="img" aria-label={`${direction} ${type}`}>
+            <g transform={`rotate(${rotation} 12 12)`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {type === '직진' && <><path d="M12 20V5"/><path d="M8 9l4-4 4 4"/></>}
+                {type === '좌회전' && <><path d="M12 20v-6c0-4-2-6-6-6H4"/><path d="M8 4L4 8l4 4"/></>}
+                {type === '우회전' && <><path d="M12 20v-6c0-4 2-6 6-6h2"/><path d="M16 4l4 4-4 4"/></>}
+            </g>
+        </svg>
+    );
+};
+
+export const normalizePhaseMovements = (phase = {}) => {
+    if (Array.isArray(phase.movements)) {
+        const seen = new Set();
+        return phase.movements.filter(movement => {
+            const key = `${movement?.direction}-${movement?.type}`;
+            if (!MOVEMENT_DIRECTIONS.includes(movement?.direction) || !MOVEMENT_TYPES.includes(movement?.type) || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
+    const direction = MOVEMENT_DIRECTIONS.includes(phase.direction) ? phase.direction : null;
+    if (!direction || !phase.type || phase.type === '올레드') return [];
+    const add = (dir, type) => ({ direction: dir, type });
+    switch (phase.type) {
+        case '직좌동시': return [add(direction, '직진'), add(direction, '좌회전')];
+        case '양방직진': return [add(direction, '직진'), add(oppositeDirection[direction], '직진')];
+        case '양방좌회전': return [add(direction, '좌회전'), add(oppositeDirection[direction], '좌회전')];
+        case '적신호시 우회전': return [add(direction, '우회전')];
+        default: return MOVEMENT_TYPES.includes(phase.type) ? [add(direction, phase.type)] : [];
+    }
+};
+
+export const formatPhaseMovements = (movements = []) => {
+    if (!movements.length) return '올레드(이동류 없음)';
+    return MOVEMENT_DIRECTIONS
+        .map(direction => {
+            const types = MOVEMENT_TYPES.filter(type => movements.some(movement => movement.direction === direction && movement.type === type));
+            return types.length ? `${direction} ${types.join('·')}` : null;
+        })
+        .filter(Boolean)
+        .join(' + ');
+};
+
+const escapeCsvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+export const buildExportCsv = (projects = [], intersectionsData = {}, selectedProjects = {}) => {
+    const headers = ['프로젝트', '교차로 번호', '교차로명', '위도', '경도', '사용 방향', '현시', '이동류', '최종 시간(초)', '전체 시간기록(초)', '비보호 좌회전', '현장 메모'];
+    const rows = [];
+
+    projects.forEach(project => {
+        if (!selectedProjects[project.id]) return;
+        (intersectionsData[project.id] || []).forEach(intersection => {
+            const phasesToExport = Array.isArray(intersection.phases) && intersection.phases.length
+                ? intersection.phases
+                : [{ movements: [], times: [], isPermissive: false }];
+            phasesToExport.forEach((phase, index) => {
+                const times = Array.isArray(phase.times) ? phase.times : [];
+                rows.push([
+                    project.name,
+                    intersection.number,
+                    intersection.name,
+                    intersection.location?.lat ?? '',
+                    intersection.location?.lng ?? '',
+                    (intersection.directions || DEFAULT_DIRECTIONS).join(' · '),
+                    `P${index + 1}`,
+                    formatPhaseMovements(normalizePhaseMovements(phase)),
+                    times.length ? times[times.length - 1] : '',
+                    times.join(' · '),
+                    phase.isPermissive ? 'Y' : 'N',
+                    intersection.memo || '',
+                ].map(escapeCsvCell));
+            });
+        });
+    });
+
+    return rows.length ? `\uFEFF${headers.map(escapeCsvCell).join(',')}\r\n${rows.map(row => row.join(',')).join('\r\n')}` : '';
+};
+
+export const PhaseMovementSummary = ({ movements = [], isPermissive = false }) => {
+    if (!movements.length) {
+        return <span className="inline-flex items-center gap-2 text-sm font-semibold text-red-500"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />올레드</span>;
+    }
+    return (
+        <div className="flex flex-wrap gap-1.5" aria-label={formatPhaseMovements(movements)}>
+            {MOVEMENT_DIRECTIONS.flatMap(direction => MOVEMENT_TYPES
+                .filter(type => movements.some(movement => movement.direction === direction && movement.type === type))
+                .map(type => {
+                    const permissiveLeft = isPermissive && type === '좌회전';
+                    return (
+                        <span key={`${direction}-${type}`} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${permissiveLeft ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300'}`}>
+                            <MovementArrowIcon direction={direction} type={type} className="h-4 w-4" />
+                            {direction} {type}
+                        </span>
+                    );
+                }))}
+        </div>
+    );
+};
+
 // --- Components ---
 
 const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
@@ -131,55 +245,29 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     };
     
     const handleExport = () => {
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-        csvContent += "Project Name,Intersection No,Intersection Name,Phase Index,Direction,Type,Final Time (s),Permissive\r\n";
-        const dataRows = [];
-
-        projects.forEach(project => {
-            if (selectedProjects[project.id]) {
-                const intersections = intersectionsData[project.id] || [];
-                intersections.forEach(intersection => {
-                    if (intersection.phases) {
-                        intersection.phases.forEach((phase, index) => {
-                            const latestTime = (phase.times && phase.times.length > 0) ? phase.times[phase.times.length - 1] : '';
-                            const row = [
-                                `"${project.name}"`,
-                                intersection.number,
-                                `"${intersection.name}"`,
-                                index + 1,
-                                phase.direction || '',
-                                phase.type || '',
-                                latestTime,
-                                phase.isPermissive ? 'Y' : 'N'
-                            ].join(',');
-                            dataRows.push(row);
-                        });
-                    }
-                });
-            }
-        });
-
-        if (dataRows.length === 0) {
+        const csvContent = buildExportCsv(projects, intersectionsData, selectedProjects);
+        if (!csvContent) {
             showAlert("내보낼 데이터가 없습니다. 프로젝트를 선택해주세요.");
             return;
         }
-        
-        csvContent += dataRows.join("\r\n");
-        const encodedUri = encodeURI(csvContent);
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+        const downloadUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "signal_data_backup.csv");
+        link.setAttribute("href", downloadUrl);
+        link.setAttribute("download", `signal_data_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(downloadUrl);
         onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="glass-modal p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
                 <h3 className="text-lg font-bold mb-4 dark:text-white">내보낼 데이터 선택</h3>
                 <div className="max-h-96 overflow-y-auto space-y-2">
                     {isLoading ? <p className="dark:text-gray-300">데이터 로딩 중...</p> : projects.map(project => (
@@ -209,14 +297,14 @@ const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, onBackup
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="glass-modal p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold dark:text-white">설정</h3>
                     <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300"><X size={20}/></button>
                 </div>
                 <div className="space-y-4">
-                    <button onClick={onToggleDarkMode} className="w-full flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <button onClick={onToggleDarkMode} className="w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
                         <span className="font-semibold dark:text-gray-200">다크 모드</span>
                         <div className="flex items-center gap-2">
                             {isDarkMode ? <Moon size={20} className="text-yellow-400"/> : <Sun size={20} className="text-orange-500"/>}
@@ -225,10 +313,10 @@ const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, onBackup
                             </div>
                         </div>
                     </button>
-                    <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 font-semibold dark:text-gray-200">
+                    <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>
-                    <button onClick={onReset} className="w-full flex items-center gap-3 p-3 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/80 font-semibold">
+                    <button onClick={onReset} className="w-full flex items-center gap-3 p-3 bg-red-100/70 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-2xl hover:bg-red-200/80 dark:hover:bg-red-900/60 font-semibold">
                         <RefreshCw size={20}/> 앱 초기화
                     </button>
                 </div>
@@ -256,8 +344,8 @@ const AddProjectModal = ({ isOpen, onClose, onSave, initialName }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm">
+        <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4">
+            <div className="glass-modal p-6 w-full max-w-sm">
                 <h3 className="text-lg font-bold mb-4 dark:text-white">새 프로젝트 추가</h3>
                 <input
                     type="text"
@@ -278,62 +366,112 @@ const AddProjectModal = ({ isOpen, onClose, onSave, initialName }) => {
 };
 
 
-const DirectionSelectionModal = ({ onSelect, onClose }) => {
-    const directions = ['SB', 'SWB', 'WB', 'NWB', 'NB', 'NEB', 'EB', 'SEB'];
-    const positions = [
-      { top: '0%', left: '50%', transform: 'translate(-50%, -50%)' },   // Top (SB)
-      { top: '15%', left: '15%', transform: 'translate(-50%, -50%)' },  // Top-Left (SWB)
-      { top: '50%', left: '0%', transform: 'translate(-50%, -50%)' },    // Left (WB)
-      { top: '85%', left: '15%', transform: 'translate(-50%, -50%)' },  // Bottom-Left (NWB)
-      { top: '100%', left: '50%', transform: 'translate(-50%, -50%)' }, // Bottom (NB)
-      { top: '85%', left: '85%', transform: 'translate(-50%, -50%)' },  // Bottom-Right (NEB)
-      { top: '50%', left: '100%', transform: 'translate(-50%, -50%)' }, // Right (EB)
-      { top: '15%', left: '85%', transform: 'translate(-50%, -50%)' },  // Top-Right (SEB)
-    ];
+export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDirections = [], onSave, onClose }) => {
+    const [selectedDirections, setSelectedDirections] = useState(directions);
+    const [showDiagonalDirections, setShowDiagonalDirections] = useState(false);
+    const diagonalDirections = ['SWB', 'NWB', 'NEB', 'SEB'];
+    const selectedDiagonalCount = directions.filter(direction => !DEFAULT_DIRECTIONS.includes(direction)).length;
 
+    const toggleDirection = (direction) => {
+        const isSelected = selectedDirections.includes(direction);
+        if (isSelected && usedDirections.includes(direction)) return;
+        setSelectedDirections(isSelected
+            ? selectedDirections.filter(item => item !== direction)
+            : [...selectedDirections, direction]);
+    };
+
+    const orderedDirections = ALL_DIRECTIONS.filter(direction => selectedDirections.includes(direction));
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-full shadow-2xl p-8 w-64 h-64 relative" onClick={e => e.stopPropagation()}>
-                <div className="absolute inset-0 flex justify-center items-center">
-                    <div className="w-full h-px bg-gray-300 dark:bg-gray-600"></div>
-                    <div className="w-px h-full bg-gray-300 dark:bg-gray-600 absolute"></div>
-                    <div className="w-full h-px bg-gray-300 dark:bg-gray-600 absolute" style={{transform: 'rotate(45deg)'}}></div>
-                    <div className="w-full h-px bg-gray-300 dark:bg-gray-600 absolute" style={{transform: 'rotate(-45deg)'}}></div>
+        <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="glass-modal p-5 sm:p-6 w-full max-w-lg" onClick={event => event.stopPropagation()}>
+                <h3 className="text-lg font-bold dark:text-white">교차로 방향 설정</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">기본 4방향에 대각선 방향을 추가해 5지 이상 교차로를 구성하세요.</p>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                    {DEFAULT_DIRECTIONS.map(direction => (
+                        <div key={direction} className="flex items-center gap-3 rounded-2xl border border-white/70 dark:border-white/10 bg-white/55 dark:bg-white/5 px-4 py-3 text-gray-700 dark:text-gray-200">
+                            <MovementArrowIcon direction={direction} type="직진" className="h-6 w-6 text-blue-600 dark:text-blue-300" />
+                            <span className="font-bold">{direction}</span><span className="ml-auto text-xs text-gray-400">기본</span>
+                        </div>
+                    ))}
                 </div>
-                {directions.map((dir, index) => (
-                    <button
-                        key={dir}
-                        onClick={() => onSelect(dir)}
-                        className="absolute w-12 h-12 bg-blue-500 text-white rounded-full flex justify-center items-center font-bold text-sm hover:bg-blue-700 transition-all duration-200 transform hover:scale-110"
-                        style={positions[index]}
-                    >
-                        {dir}
-                    </button>
-                ))}
+                <button type="button" aria-expanded={showDiagonalDirections} onClick={() => setShowDiagonalDirections(value => !value)} className="mt-5 w-full flex items-center justify-between rounded-2xl border border-white/70 dark:border-white/10 bg-white/50 dark:bg-white/5 px-4 py-3 text-sm font-bold text-gray-700 dark:text-gray-200">
+                    <span>5지 이상 교차로 · 대각선 방향 {selectedDiagonalCount ? `${selectedDiagonalCount}개 사용 중` : '추가'}</span>
+                    {showDiagonalDirections ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {showDiagonalDirections && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {diagonalDirections.map(direction => {
+                        const selected = selectedDirections.includes(direction);
+                        const inUse = usedDirections.includes(direction);
+                        return (
+                            <button key={direction} type="button" aria-pressed={selected} aria-label={`${direction} 방향 ${selected ? '제거' : '추가'}`} disabled={selected && inUse} onClick={() => toggleDirection(direction)} className={`min-h-20 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${selected ? 'border-blue-400 bg-blue-100/80 text-blue-700 dark:bg-blue-400/20 dark:text-blue-200' : 'border-white/70 bg-white/50 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-300'} disabled:opacity-70 disabled:cursor-not-allowed`}>
+                                <MovementArrowIcon direction={direction} type="직진" className="h-8 w-8" />
+                                <span className="font-bold text-sm">{direction}</span>
+                                {inUse && <span className="text-[10px]">사용 중</span>}
+                            </button>
+                        );
+                    })}
+                </div>}
+                <div className="mt-4 rounded-2xl bg-white/55 dark:bg-white/5 p-3 text-sm text-gray-600 dark:text-gray-300">활성 방향 {orderedDirections.length}개: <strong>{orderedDirections.join(' · ')}</strong></div>
+                <div className="mt-5 flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 rounded-2xl bg-gray-200 dark:bg-gray-600 font-semibold">취소</button>
+                    <button type="button" onClick={() => onSave(orderedDirections)} className="px-5 py-2 rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700">방향 적용</button>
+                </div>
             </div>
         </div>
     );
 };
 
-const PhaseSelectionModal = ({ onSelect, onClose }) => {
-    const phaseTypes = [
-        '직진', '좌회전', '우회전',
-        '직좌동시', '양방직진', '양방좌회전',
-        '유턴', '적신호시 우회전', '올레드'
-    ];
+export const PhaseSelectionModal = ({ directions = DEFAULT_DIRECTIONS, initialMovements = [], isPermissive = false, onSave, onClose }) => {
+    const [selectedMovements, setSelectedMovements] = useState(initialMovements);
+
+    const toggleMovement = (direction, type) => {
+        const exists = selectedMovements.some(movement => movement.direction === direction && movement.type === type);
+        setSelectedMovements(exists
+            ? selectedMovements.filter(movement => !(movement.direction === direction && movement.type === type))
+            : [...selectedMovements, { direction, type }]);
+    };
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold mb-4 dark:text-white">현시 종류 선택</h3>
-                <div className="grid grid-cols-3 gap-2">
-                    {phaseTypes.map(type => (
-                        <button key={type} onClick={() => onSelect(type)} className="p-2 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-md transition-colors">
-                            {type}
-                        </button>
+        <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="glass-modal p-4 sm:p-6 w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold mb-1 dark:text-white">현시 이동류 조합</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">방향별 이동류를 여러 개 선택해 하나의 현시를 만드세요. 선택이 없으면 올레드로 저장됩니다.</p>
+                <div className="grid grid-cols-[3rem_repeat(3,minmax(0,1fr))] gap-1.5 sm:gap-2" role="grid" aria-label={`${directions.length}방향 3이동류 선택표`}>
+                    <div aria-hidden="true" />
+                    {MOVEMENT_TYPES.map(type => <div key={type} className="text-center text-[11px] sm:text-sm font-semibold text-gray-600 dark:text-gray-300 break-keep">{type}</div>)}
+                    {directions.map(direction => (
+                        <React.Fragment key={direction}>
+                            <div className="flex items-center justify-center text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-200">{direction}</div>
+                            {MOVEMENT_TYPES.map(type => {
+                                const selected = selectedMovements.some(movement => movement.direction === direction && movement.type === type);
+                                const permissiveLeft = selected && isPermissive && type === '좌회전';
+                                return (
+                                    <button
+                                        key={`${direction}-${type}`}
+                                        type="button"
+                                        aria-pressed={selected}
+                                        aria-label={`${direction} ${type} ${selected ? '선택 해제' : '선택'}`}
+                                        onClick={() => toggleMovement(direction, type)}
+                                        className={`min-h-16 sm:min-h-20 flex items-center justify-center rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${permissiveLeft ? 'border-amber-400 bg-amber-100/80 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300' : selected ? 'border-emerald-400 bg-emerald-100/80 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300' : 'border-white/70 bg-white/50 text-gray-500 hover:border-blue-300 hover:bg-white/80 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10'}`}
+                                    >
+                                        <MovementArrowIcon direction={direction} type={type} className="h-8 w-8 sm:h-10 sm:w-10" />
+                                    </button>
+                                );
+                            })}
+                        </React.Fragment>
                     ))}
                 </div>
-                <button onClick={onClose} className="mt-6 w-full p-2 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold">닫기</button>
+                <div className="mt-4 rounded-2xl bg-white/55 dark:bg-white/5 border border-white/60 dark:border-white/10 p-3 text-sm text-gray-700 dark:text-gray-200 min-h-11">
+                    <span className="font-semibold">선택 현시: </span>{formatPhaseMovements(selectedMovements)}
+                </div>
+                <div className="mt-5 flex flex-wrap justify-between gap-2">
+                    <button type="button" onClick={() => setSelectedMovements([])} className="p-2 px-4 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md font-semibold">전체 해제</button>
+                    <div className="flex gap-2 ml-auto">
+                        <button type="button" onClick={onClose} className="p-2 px-4 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold">취소</button>
+                        <button type="button" onClick={() => onSave(selectedMovements)} className="p-2 px-5 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold">현시 적용</button>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -350,7 +488,8 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [isSavingLocation, setIsSavingLocation] = useState(false); // New state for location saving
     const [phases, setPhases] = useState([]);
     const [isPhaseModalOpen, setIsPhaseModalOpen] = useState(false);
-    const [isDirectionModalOpen, setIsDirectionModalOpen] = useState(false);
+    const [isDirectionSettingsOpen, setIsDirectionSettingsOpen] = useState(false);
+    const [directions, setDirections] = useState(DEFAULT_DIRECTIONS);
     const [editingIndex, setEditingIndex] = useState(null);
     const [timer, setTimer] = useState({ active: false, index: null, startTime: 0, elapsed: 0 });
     const intervalIdRef = useRef(null);
@@ -375,6 +514,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 mapIcons: mapIcons,
                 memo: memo,
                 phases: phases,
+                directions: directions,
             };
             await updateDoc(docRef, dataToSave);
             
@@ -383,6 +523,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 mapIcons: mapIcons,
                 memo: memo,
                 phases: phases,
+                directions: directions,
             };
             setIsDirty(false);
             showAlert("모든 변경사항이 저장되었습니다.");
@@ -443,19 +584,26 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 }
                 setMapIcons(data.mapIcons || {});
                 setMemo(data.memo || '');
-                const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array(4).fill({ direction: null, type: null, times: [], isPermissive: false })).map(p => ({
-                    direction: p.direction || null,
-                    type: p.type || null,
+                const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false }))).map(p => ({
+                    movements: normalizePhaseMovements(p),
                     times: Array.isArray(p.times) ? p.times : [],
                     isPermissive: p.isPermissive || false
                 }));
                 setPhases(validPhases);
+                const directionsInUse = [
+                    ...validPhases.flatMap(phase => phase.movements.map(movement => movement.direction)),
+                    ...Object.keys(data.mapIcons || {})
+                ];
+                const savedDirections = Array.isArray(data.directions) ? data.directions : [];
+                const validDirections = ALL_DIRECTIONS.filter(direction => DEFAULT_DIRECTIONS.includes(direction) || savedDirections.includes(direction) || directionsInUse.includes(direction));
+                setDirections(validDirections);
                 
                 const initialSnapshot = { 
                     location: data.location, 
                     mapIcons: data.mapIcons || {}, 
                     memo: data.memo || '',
                     phases: validPhases,
+                    directions: validDirections,
                 };
                 if (!initialData.current) {
                     initialData.current = initialSnapshot;
@@ -475,9 +623,10 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             const iconsChanged = JSON.stringify(initialData.current.mapIcons) !== JSON.stringify(mapIcons);
             const memoChanged = initialData.current.memo !== memo;
             const phasesChanged = JSON.stringify(initialData.current.phases) !== JSON.stringify(phases);
-            setIsDirty(locationChanged || iconsChanged || memoChanged || phasesChanged);
+            const directionsChanged = JSON.stringify(initialData.current.directions) !== JSON.stringify(directions);
+            setIsDirty(locationChanged || iconsChanged || memoChanged || phasesChanged || directionsChanged);
         }
-    }, [mapCenter, mapIcons, memo, phases]);
+    }, [mapCenter, mapIcons, memo, phases, directions]);
 
     useEffect(() => {
         const handleBeforeUnload = (e) => {
@@ -492,7 +641,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     useEffect(() => {
         const mapContainer = mapContainerRef.current;
-        if (!details || !mapContainer) return;
+        if (!details || !mapContainer || !isLocationVisible || !isGoogleMapsApiKeyConfigured) return;
     
         loadGoogleMapsScript(() => {
             if (!mapContainerRef.current) return;
@@ -541,7 +690,11 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             mainMarkerRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [details, mapTypeId]);
+    }, [details, isLocationVisible]);
+
+    useEffect(() => {
+        if (map) map.setMapTypeId(mapTypeId);
+    }, [map, mapTypeId]);
     
     useEffect(() => {
         if (!map) return;
@@ -617,31 +770,25 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         setIsPhaseModalOpen(true);
     };
 
-    const handleDirectionClick = (index) => {
-        setEditingIndex(index);
-        setIsDirectionModalOpen(true);
-    };
-
     const updatePhases = (newPhases) => {
         setPhases(newPhases);
         // Deferring DB update to save button
     };
 
-    const handleSelectPhaseType = (type) => {
+    const handleSavePhaseMovements = (movements) => {
         const newPhases = JSON.parse(JSON.stringify(phases));
-        newPhases[editingIndex].type = type;
+        newPhases[editingIndex].movements = movements;
+        if (!movements.some(movement => movement.type === '좌회전')) {
+            newPhases[editingIndex].isPermissive = false;
+        }
         updatePhases(newPhases);
         setIsPhaseModalOpen(false);
         setEditingIndex(null);
     };
 
-
-    const handleSelectDirection = (direction) => {
-        const newPhases = JSON.parse(JSON.stringify(phases));
-        newPhases[editingIndex].direction = direction;
-        updatePhases(newPhases);
-        setIsDirectionModalOpen(false);
-        setEditingIndex(null);
+    const handleSaveDirections = (nextDirections) => {
+        setDirections(nextDirections);
+        setIsDirectionSettingsOpen(false);
     };
 
     const stopAndResetTimer = useCallback(() => {
@@ -710,7 +857,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     const handleAddPhase = () => {
         if (isRecordModeActive) return;
-        const newPhases = [...phases, { direction: null, type: null, times: [], isPermissive: false }];
+        const newPhases = [...phases, { movements: [], times: [], isPermissive: false }];
         updatePhases(newPhases);
     };
 
@@ -758,12 +905,12 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     if (!details) return <div className="p-6 text-center dark:text-gray-300">교차로 정보를 불러오는 중...</div>;
 
     return (
-        <div className="p-4 sm:p-6 lg:p-8">
-            {isPhaseModalOpen && <PhaseSelectionModal onClose={() => setIsPhaseModalOpen(false)} onSelect={handleSelectPhaseType} />}
-            {isDirectionModalOpen && <DirectionSelectionModal onClose={() => setIsDirectionModalOpen(false)} onSelect={handleSelectDirection} />}
+        <div className="p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-28 max-w-5xl mx-auto">
+            {isPhaseModalOpen && editingIndex !== null && <PhaseSelectionModal directions={directions} initialMovements={phases[editingIndex]?.movements || []} isPermissive={phases[editingIndex]?.isPermissive || false} onClose={() => { setIsPhaseModalOpen(false); setEditingIndex(null); }} onSave={handleSavePhaseMovements} />}
+            {isDirectionSettingsOpen && <DirectionSettingsModal directions={directions} usedDirections={[...new Set([...phases.flatMap(phase => phase.movements.map(movement => movement.direction)), ...Object.keys(mapIcons)])]} onClose={() => setIsDirectionSettingsOpen(false)} onSave={handleSaveDirections} />}
             <header className="mb-6">
                 <div className="flex items-center justify-between">
-                    <button onClick={handleBack} className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"><ArrowLeft size={20} /> 목록으로</button>
+                    <button onClick={handleBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all"><ArrowLeft size={20} /> 목록으로</button>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-center mt-2 truncate">{details.number}. {details.name}</h1>
             </header>
@@ -771,15 +918,15 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             <section className="mb-8">
                  <div className="flex items-center justify-between mb-3">
                     <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><MapPin size={24} className="text-blue-500" /> 교차로 위치</h2>
-                    <button onClick={() => setIsLocationVisible(!isLocationVisible)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <button onClick={() => setIsLocationVisible(!isLocationVisible)} aria-label={isLocationVisible ? '지도 영역 접기' : '지도 영역 펼치기'} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
                         {isLocationVisible ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
                     </button>
                 </div>
                 {isLocationVisible && (
                     <>
                         <div className="relative">
-                            <div ref={mapContainerRef} className="w-full h-96 bg-gray-200 dark:bg-gray-700 rounded-lg shadow-md overflow-hidden">
-                                {GOOGLE_MAPS_API_KEY.includes('AIzaSyB') &&
+                            <div ref={mapContainerRef} className="w-full h-96 bg-gray-200 dark:bg-gray-700 rounded-[2rem] shadow-xl overflow-hidden border border-white/70 dark:border-white/10">
+                                {!isGoogleMapsApiKeyConfigured &&
                                     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-700 p-4 text-center">
                                         <AlertTriangle size={48} className="mb-4" />
                                         <p className="text-lg font-bold">Google Maps API 키가 유효하지 않습니다.</p>
@@ -794,19 +941,19 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 className="absolute top-3 left-3 w-1/2 max-w-xs px-4 py-2 bg-white dark:bg-gray-800 dark:text-white rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <div className="absolute top-3 right-3 flex flex-col gap-2">
-                                <button onClick={handleFindMe} title="현재 위치 찾기" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <button onClick={handleFindMe} title="현재 위치 찾기" aria-label="현재 위치 찾기" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <Crosshair className="text-gray-700 dark:text-gray-300" size={20} />
                                 </button>
-                                <button onClick={() => setMapTypeId(mapTypeId === 'roadmap' ? 'satellite' : 'roadmap')} title="위성/지도 전환" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <button onClick={() => setMapTypeId(mapTypeId === 'roadmap' ? 'satellite' : 'roadmap')} title="위성/지도 전환" aria-label="위성/지도 전환" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <Satellite className="text-gray-700 dark:text-gray-300" size={20} />
                                 </button>
                             </div>
                         </div>
-                         <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                         <div className="mt-4 p-4 content-surface">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">방향 아이콘 (클릭하여 지도에 추가/삭제)</h3>
-                                <div className="flex items-center justify-between gap-4">
-                                    {['SB', 'WB', 'NB', 'EB'].map(dir => (
+                                <div className="flex items-center justify-start gap-3 flex-wrap">
+                                    {directions.map(dir => (
                                         <button
                                             key={dir}
                                             onClick={() => mapIcons[dir] ? removeMapIcon(dir) : addMapIcon(dir)}
@@ -822,7 +969,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                             <button 
                                 onClick={handleSaveLocation} 
                                 disabled={isSavingLocation}
-                                className="w-full mt-4 p-3 bg-teal-500 text-white font-semibold rounded-lg shadow-md hover:bg-teal-600 transition-colors flex items-center justify-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                className="soft-button w-full mt-4 p-3 bg-teal-500 text-white font-semibold hover:bg-teal-600 flex items-center justify-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
                                 {isSavingLocation ? (
                                     <>
@@ -842,45 +989,46 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             </section>
             
             <section>
-                <h2 className="text-xl font-semibold mb-3 flex items-center gap-2 dark:text-white"><Timer size={24} className="text-green-500" /> 신호 현시 정보</h2>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                    <div className="mb-6 flex justify-between items-center bg-gray-100 dark:bg-gray-700 p-4 rounded-lg">
-                        <span className="font-bold text-lg dark:text-white">신호 주기 (Cycle)</span>
-                        <span className="font-bold text-2xl text-green-700 dark:text-green-400">{cycleLength} 초</span>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-semibold flex items-center gap-2 dark:text-white"><Timer size={24} className="text-green-500" /> 신호 현시 정보</h2>
+                    <button type="button" onClick={() => setIsDirectionSettingsOpen(true)} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 dark:text-blue-200 hover:bg-white/80 dark:hover:bg-white/10"><SlidersHorizontal size={16} /> 방향 설정 <span className="text-xs opacity-70">{directions.length}</span></button>
+                </div>
+                <div className="content-surface p-3 sm:p-4">
+                    <div className="mb-3 flex justify-between items-center bg-white/55 dark:bg-white/5 border border-white/60 dark:border-white/10 px-4 py-3 rounded-2xl">
+                        <div className="flex items-baseline gap-2"><span className="font-bold dark:text-white">신호 주기</span><span className="text-xs text-gray-500 dark:text-gray-400">{phases.length}현시</span></div>
+                        <span className="font-bold text-xl text-emerald-700 dark:text-emerald-400">{cycleLength}초</span>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                         {phases.map((phase, index) => {
                              const latestTime = phase.times && phase.times.length > 0 ? phase.times[phase.times.length - 1] : 0;
                              const isCurrentlyTiming = timer.active && timer.index === index;
                              const isThisPhaseInRecordMode = isRecordModeActive && currentRecordingPhaseIndex === index;
 
                             return(
-                            <div key={index} className={`rounded-lg border p-4 space-y-3 transition-all duration-300 ${isThisPhaseInRecordMode ? 'border-green-500 bg-green-50 dark:bg-green-900/50' : 'border-gray-200 dark:border-gray-700'}`}>
+                            <div key={index} className={`phase-card p-3 space-y-2 transition-all duration-300 ${isThisPhaseInRecordMode ? 'phase-card-active' : ''}`}>
                                 <div className="flex justify-between items-center gap-2">
-                                    <div className="flex items-center gap-2 flex-grow min-w-0">
-                                        <button onClick={() => handleDirectionClick(index)} disabled={isRecordModeActive} className="flex-shrink-0 flex items-center justify-center gap-1 p-2 h-10 w-16 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md disabled:cursor-not-allowed disabled:bg-gray-600 dark:text-gray-200">
-                                            <Compass size={16} className="text-gray-600 dark:text-gray-400" />
-                                            <span className="font-bold text-sm">{phase.direction || '-'}</span>
-                                        </button>
-                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} className="flex-grow flex items-center gap-2 p-2 h-10 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md border border-dashed border-gray-300 dark:border-gray-600 disabled:cursor-not-allowed disabled:bg-gray-600 dark:text-gray-200 min-w-0">
-                                            <Edit size={16} className="text-gray-400" /><span className="font-medium truncate">{phase.type || '현시 선택'}</span>
+                                    <div className="flex items-stretch gap-2 flex-grow min-w-0">
+                                        <span className="flex-shrink-0 flex items-center justify-center h-11 min-w-11 px-2 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-sm">P{index + 1}</span>
+                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} aria-label={`${index + 1}번 현시 이동류 조합 편집`} title="눌러서 현시 이동류 조합 편집" className="group w-full flex items-center justify-between gap-2 px-3 py-2 min-h-11 bg-white/55 dark:bg-white/5 hover:bg-blue-50/90 dark:hover:bg-blue-400/10 rounded-2xl border border-white/70 hover:border-blue-300 dark:border-white/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 min-w-0 text-left transition-all">
+                                            <PhaseMovementSummary movements={phase.movements} isPermissive={phase.isPermissive} />
+                                            <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300"><Edit size={12} /> 이동류 편집</span>
                                         </button>
                                     </div>
-                                    <button onClick={() => handleRemovePhase(index)} disabled={isRecordModeActive || phases.length <= 1} className="ml-2 p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full disabled:text-gray-400 dark:disabled:text-gray-500 disabled:bg-transparent disabled:cursor-not-allowed">
+                                    <button onClick={() => handleRemovePhase(index)} aria-label={`${index + 1}번 현시 삭제`} disabled={isRecordModeActive || phases.length <= 1} className="ml-2 p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full disabled:text-gray-400 dark:disabled:text-gray-500 disabled:bg-transparent disabled:cursor-not-allowed">
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                    <div className="flex items-end justify-center sm:justify-start gap-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="flex items-center justify-between sm:justify-start gap-3">
                                         <div className="flex flex-col items-center gap-1">
-                                            <label htmlFor={`permissive-${index}`} className="text-xs dark:text-gray-300">비보호</label>
+                                            <label htmlFor={`permissive-${index}`} className="text-[11px] dark:text-gray-300">비보호</label>
                                             <input
                                                 type="checkbox"
                                                 id={`permissive-${index}`}
                                                 checked={phase.isPermissive || false}
                                                 onChange={() => handleTogglePermissive(index)}
-                                                disabled={isRecordModeActive}
-                                                className="w-4 h-4 accent-blue-600"
+                                                disabled={isRecordModeActive || !phase.movements.some(movement => movement.type === '좌회전')}
+                                                className="w-5 h-5 accent-amber-500 disabled:opacity-30"
                                             />
                                         </div>
                                         <div className="flex items-center gap-2 dark:text-white">
@@ -892,17 +1040,19 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                                     onChange={(e) => setEditingTime({ ...editingTime, value: e.target.value })}
                                                     onBlur={() => handleSaveTime(index)}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') handleSaveTime(index); }}
-                                                    className="w-24 text-center font-mono text-2xl font-bold bg-transparent border-b-2 border-blue-500 focus:outline-none"
+                                                    className="w-20 text-center font-mono text-xl font-bold bg-transparent border-b-2 border-blue-500 focus:outline-none"
                                                     autoFocus
                                                 />
                                             ) : (
                                                 <>
-                                                    <span className="font-mono text-2xl font-bold" onClick={() => handleEditTimeClick(index, latestTime)}>
+                                                    <span className="font-mono text-xl font-bold" onClick={() => handleEditTimeClick(index, latestTime)}>
                                                         {isCurrentlyTiming ? timer.elapsed.toFixed(1) : latestTime.toFixed(1)}
                                                     </span>
+                                                    <span className="text-xs text-gray-400">초</span>
                                                     <button 
                                                         onClick={() => handleEditTimeClick(index, latestTime)} 
                                                         disabled={isRecordModeActive || timer.active}
+                                                        aria-label={`${index + 1}번 현시 시간 직접 수정`}
                                                         className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:text-gray-500 disabled:cursor-not-allowed"
                                                     >
                                                         <Edit size={14} />
@@ -919,7 +1069,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                     </div>
                                     <div className="flex items-center justify-center sm:justify-end gap-2 flex-wrap">
                                         <button onClick={() => handleIndividualTimerToggle(index)} 
-                                            className={`w-28 p-2 rounded-md text-white font-semibold flex items-center justify-center gap-2 transition-colors ${isRecordModeActive || (timer.active && !isCurrentlyTiming) ? 'bg-gray-400 cursor-not-allowed' : (isCurrentlyTiming ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600')}`}
+                                            className={`w-24 p-2 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${isRecordModeActive || (timer.active && !isCurrentlyTiming) ? 'bg-gray-400 cursor-not-allowed' : (isCurrentlyTiming ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600')}`}
                                             disabled={isRecordModeActive || (timer.active && !isCurrentlyTiming)}
                                         >
                                             {isCurrentlyTiming ? <Square size={16}/> : <Play size={16}/>}
@@ -930,18 +1080,18 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                             </div>
                         )})}
                     </div>
-                    <div className="mt-6">
-                        <button onClick={handleAddPhase} disabled={isRecordModeActive} className="w-full flex items-center justify-center gap-2 p-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-400 transition-colors disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:cursor-not-allowed">
+                    <div className="mt-3">
+                        <button onClick={handleAddPhase} disabled={isRecordModeActive} className="w-full flex items-center justify-center gap-2 p-3 border border-dashed border-blue-300 dark:border-blue-400/30 rounded-2xl text-blue-600 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-400/5 hover:bg-blue-100/70 dark:hover:bg-blue-400/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <Plus size={18} />
-                            현시 추가
+                            현시 추가 (현재 {phases.length}개 · 제한 없음)
                         </button>
                     </div>
-                    <div className="mt-8 border-t dark:border-gray-700 pt-6">
+                    <div className="mt-5 border-t dark:border-gray-700 pt-4">
                          <h3 className="text-lg font-semibold text-center mb-3 dark:text-white">연속 시간 기록 모드</h3>
                          <button 
                             onClick={isRecordModeActive ? handleRecordAndNext : handleToggleRecordMode}
                             disabled={timer.active && !isRecordModeActive}
-                            className={`w-full p-4 rounded-lg text-white font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-lg ${isRecordModeActive ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-400 disabled:cursor-not-allowed`}
+                            className={`soft-button w-full p-4 text-white font-bold text-lg flex items-center justify-center gap-3 ${isRecordModeActive ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} disabled:bg-gray-400 disabled:cursor-not-allowed`}
                         >
                             {isRecordModeActive ? (
                                 <>
@@ -966,20 +1116,20 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             
             <section className="mt-8">
                  <h2 className="text-xl font-semibold mb-3 flex items-center gap-2 dark:text-white"><StickyNote size={24} className="text-yellow-500" /> 현장 메모</h2>
-                 <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+                 <div className="content-surface p-4">
                     <textarea 
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
                         placeholder="현장 특이사항, 주변 여건 등 자유롭게 메모하세요..."
-                        className="w-full h-40 p-3 border border-gray-200 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-white"
+                        className="w-full h-40 p-4 border border-white/70 dark:border-white/10 rounded-3xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white/55 dark:bg-white/5 dark:text-white"
                     ></textarea>
                </div>
             </section>
             
-            <div className="mt-8">
-                <button onClick={handleSaveAll} disabled={isSaving || isSavingLocation} className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-4 px-4 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400">
+            <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-3xl rounded-[1.4rem] border border-white/70 dark:border-white/10 bg-white/80 dark:bg-[#151922]/92 p-2 shadow-[0_16px_45px_rgba(30,64,175,0.24)] backdrop-blur-xl">
+                <button onClick={handleSaveAll} disabled={isSaving || isSavingLocation} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
                     <Save size={20} />
-                    {isSaving ? '저장 중...' : '모든 변경사항 저장'}
+                    {isSaving ? '저장 중...' : isDirty ? '모든 변경사항 저장 · 변경됨' : '모든 변경사항 저장'}
                 </button>
             </div>
         </div>
@@ -1054,7 +1204,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
             <header className="mb-6">
                 <div className="relative h-8 z-10">
                     <div className="absolute left-0 top-1/2 -translate-y-1/2">
-                        <button onClick={onBack} className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+                        <button onClick={onBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all">
                             <ArrowLeft size={20} />
                             프로젝트
                         </button>
@@ -1066,11 +1216,11 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                 </div>
             </header>
             <div className="mb-4">
-                <button onClick={onAdd} className="flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors">
+                <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
                     <Plus size={20} /> 교차로 추가
                 </button>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+            <div className="content-surface overflow-hidden">
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {intersections.length === 0 ? (
                         <li className="p-6 text-center text-gray-500 dark:text-gray-400">'교차로 추가' 버튼을 눌러 첫 교차로를 등록하세요.</li>
@@ -1083,7 +1233,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                                 </div>
                                 <div 
                                     ref={el => itemRefs.current[intersection.id] = el}
-                                    className="relative bg-white dark:bg-gray-800 transition-transform duration-300"
+                                    className="relative bg-white/45 dark:bg-white/5 transition-transform duration-300"
                                     onTouchStart={(e) => handleTouchStart(intersection.id, e)} onTouchMove={(e) => handleTouchMove(intersection.id, e)} onTouchEnd={() => handleTouchEnd(intersection.id)}
                                 >
                                     <div className="p-2 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1098,7 +1248,7 @@ const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onEdit, on
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-4 cursor-pointer" onClick={() => onSelect(intersection)}>
-                                                <div className="flex-shrink-0 w-12 h-12 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold rounded-lg flex items-center justify-center text-lg">{intersection.number}</div>
+                                                <div className="flex-shrink-0 w-12 h-12 bg-blue-100/80 dark:bg-blue-400/15 text-blue-700 dark:text-blue-300 font-bold rounded-2xl flex items-center justify-center text-lg">{intersection.number}</div>
                                                 <div className="flex-grow">
                                                     <p className="font-semibold text-lg text-gray-800 dark:text-gray-200">{intersection.name}</p>
                                                     <p className="text-sm text-gray-500 dark:text-gray-400">클릭하여 상세 정보 보기</p>
@@ -1181,11 +1331,11 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                 <p className="text-gray-600 dark:text-gray-400 mt-1">프로젝트를 선택하거나 새로 만드세요.</p>
             </header>
             <div className="mb-4">
-                <button onClick={onAdd} className="flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition-colors">
+                <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
                     <Plus size={20} /> 새 프로젝트 추가
                 </button>
             </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+            <div className="content-surface overflow-hidden">
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {projects.length === 0 ? (
                         <li className="p-6 text-center text-gray-500 dark:text-gray-400">'새 프로젝트 추가' 버튼을 눌러 시작하세요.</li>
@@ -1198,7 +1348,7 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                                 </div>
                                 <div 
                                     ref={el => itemRefs.current[project.id] = el}
-                                    className="relative bg-white dark:bg-gray-800 transition-transform duration-300"
+                                    className="relative bg-white/45 dark:bg-white/5 transition-transform duration-300"
                                     onTouchStart={(e) => handleTouchStart(project.id, e)} onTouchMove={(e) => handleTouchMove(project.id, e)} onTouchEnd={() => handleTouchEnd(project.id)}
                                 >
                                     <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1288,7 +1438,7 @@ export default function App() {
             const firebaseAuth = getAuth(app);
             setDb(firestoreDb);
             setAuth(firebaseAuth);
-            setLogLevel('debug');
+            setLogLevel(process.env.NODE_ENV === 'development' ? 'warn' : 'error');
         } catch (e) {
             console.error("Firebase Initialization Error:", e);
             setError('앱 초기화 실패: ' + e.message);
@@ -1435,11 +1585,11 @@ export default function App() {
             number: maxNumber + 1,
             name: `새 교차로 ${maxNumber + 1}`,
             createdAt: new Date(),
-            phases: Array(4).fill({ direction: null, type: null, times: [], isPermissive: false }),
+            phases: Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false })),
+            directions: DEFAULT_DIRECTIONS,
             location: null,
             mapIcons: {},
-            memo: '',
-            representativePhoto: null
+            memo: ''
         });
     };
 
@@ -1494,7 +1644,7 @@ export default function App() {
     if (error) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 text-red-500">{error}</div>;
     
     return (
-        <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-sans text-gray-800 dark:text-gray-200">
+        <div className="app-shell font-sans text-gray-800 dark:text-gray-200">
             <AddProjectModal
                 isOpen={isAddProjectModalOpen}
                 onClose={() => setIsAddProjectModalOpen(false)}
@@ -1518,7 +1668,7 @@ export default function App() {
                 appId={appId}
             />
             <div className="absolute top-4 right-4 z-40">
-                <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-200 dark:hover:bg-gray-700">
+                <button onClick={() => setIsSettingsOpen(true)} aria-label="설정 열기" className="glass-toolbar p-3 hover:bg-white/80 dark:hover:bg-white/10 transition-all">
                     <Settings size={24} />
                 </button>
             </div>
@@ -1556,10 +1706,11 @@ export default function App() {
                 )}
             </main>
             
-            <footer className="fixed bottom-0 left-0 right-0 bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-center p-2 text-sm text-gray-500 dark:text-gray-400 z-30">
-                <p>Created by NYH | v1.4.0</p>
-                {userId && <p className="text-xs text-gray-400 mt-1">사용자 ID: {userId}</p>}
-            </footer>
+            {view !== 'detail' && (
+                <footer className="mx-auto w-[calc(100%-1.5rem)] max-w-2xl text-center px-4 py-3 text-xs text-gray-400 dark:text-gray-500">
+                    Created by NYH · v2.0.0
+                </footer>
+            )}
         </div>
     );
 }

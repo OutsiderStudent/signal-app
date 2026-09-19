@@ -1,3 +1,117 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --glass-bg: rgba(255, 255, 255, 0.64);
+    --glass-border: rgba(255, 255, 255, 0.78);
+    --glass-shadow: 0 18px 55px rgba(39, 76, 119, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --glass-bg: rgba(15, 23, 42, 0.66);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 22px 65px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    background: #eef5ff;
+  }
+}
+
+@layer components {
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 12% 4%, rgba(99, 102, 241, 0.24), transparent 31rem),
+      radial-gradient(circle at 92% 20%, rgba(45, 212, 191, 0.20), transparent 29rem),
+      linear-gradient(145deg, #f7faff 0%, #e9f3ff 46%, #f5f1ff 100%);
+    background-attachment: fixed;
+  }
+
+  .dark .app-shell {
+    background: #0d1118;
+  }
+
+  .glass-modal,
+  .glass-toolbar {
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+    backdrop-filter: blur(24px) saturate(145%);
+  }
+
+  .glass-modal { border-radius: 2.25rem; }
+  .glass-toolbar { border-radius: 9999px; }
+  .glass-backdrop { background: rgba(15, 23, 42, 0.38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+
+  .content-surface {
+    border: 1px solid rgba(255, 255, 255, 0.76);
+    border-radius: 1.5rem;
+    background: rgba(255, 255, 255, 0.84);
+    box-shadow: 0 14px 38px rgba(39, 76, 119, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+    -webkit-backdrop-filter: blur(12px) saturate(115%);
+    backdrop-filter: blur(12px) saturate(115%);
+  }
+
+  .dark .content-surface {
+    border-color: rgba(255, 255, 255, 0.10);
+    background: rgba(15, 23, 42, 0.86);
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .phase-card {
+    border: 1px solid rgba(255, 255, 255, 0.74);
+    border-radius: 1.25rem;
+    background: rgba(255, 255, 255, 0.74);
+    box-shadow: 0 7px 22px rgba(37, 74, 117, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .dark .phase-card {
+    border-color: rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.065);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .phase-card-active {
+    border-color: rgba(16, 185, 129, 0.72);
+    background: rgba(209, 250, 229, 0.70);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12), 0 16px 36px rgba(5, 150, 105, 0.13);
+  }
+
+  .dark .phase-card-active { background: rgba(6, 78, 59, 0.46); }
+
+  .soft-button {
+    border-radius: 1.1rem;
+    box-shadow: 0 8px 22px rgba(37, 74, 117, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  .soft-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(37, 74, 117, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+  .soft-button:active { transform: scale(0.985); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-modal, .glass-toolbar, .content-surface, .phase-card { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass-modal, .glass-toolbar, .content-surface { background: white; }
+  .dark .glass-modal, .dark .glass-toolbar, .dark .content-surface { background: #111827; }
+}
+
+@media (prefers-contrast: more) {
+  .content-surface, .glass-modal, .glass-toolbar, .phase-card { background: white; border-color: #64748b; backdrop-filter: none; }
+  .dark .content-surface, .dark .glass-modal, .dark .glass-toolbar, .dark .phase-card { background: #111827; border-color: #94a3b8; }
+}
