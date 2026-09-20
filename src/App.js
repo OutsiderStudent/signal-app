@@ -219,6 +219,13 @@ export const DEFAULT_DIRECTIONS = ['SB', 'NB', 'EB', 'WB'];
 export const MOVEMENT_DIRECTIONS = ALL_DIRECTIONS;
 export const MOVEMENT_TYPES = ['직진', '좌회전', '우회전'];
 
+export const normalizeDirections = (savedDirections, directionsInUse = []) => {
+    const configuredDirections = Array.isArray(savedDirections) && savedDirections.length >= 3
+        ? savedDirections
+        : DEFAULT_DIRECTIONS;
+    return ALL_DIRECTIONS.filter(direction => configuredDirections.includes(direction) || directionsInUse.includes(direction));
+};
+
 export const formatSavedAt = (value) => {
     if (!value) return '아직 저장되지 않음';
     const date = value?.toDate ? value.toDate() : new Date(value);
@@ -747,13 +754,20 @@ const AddProjectModal = ({ isOpen, onClose, onSave, initialName }) => {
 
 export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDirections = [], onSave, onClose }) => {
     const [selectedDirections, setSelectedDirections] = useState(directions);
-    const [showDiagonalDirections, setShowDiagonalDirections] = useState(false);
-    const diagonalDirections = ['SWB', 'NWB', 'NEB', 'SEB'];
-    const selectedDiagonalCount = directions.filter(direction => !DEFAULT_DIRECTIONS.includes(direction)).length;
+    const directionPositions = {
+        NB: 'left-1/2 top-0 -translate-x-1/2',
+        NEB: 'right-[7%] top-[7%]',
+        EB: 'right-0 top-1/2 -translate-y-1/2',
+        SEB: 'right-[7%] bottom-[7%]',
+        SB: 'bottom-0 left-1/2 -translate-x-1/2',
+        SWB: 'bottom-[7%] left-[7%]',
+        WB: 'left-0 top-1/2 -translate-y-1/2',
+        NWB: 'left-[7%] top-[7%]',
+    };
 
     const toggleDirection = (direction) => {
         const isSelected = selectedDirections.includes(direction);
-        if (isSelected && usedDirections.includes(direction)) return;
+        if (isSelected && (usedDirections.includes(direction) || selectedDirections.length <= 3)) return;
         setSelectedDirections(isSelected
             ? selectedDirections.filter(item => item !== direction)
             : [...selectedDirections, direction]);
@@ -763,35 +777,42 @@ export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDi
 
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
-            <div className="glass-modal p-5 sm:p-6 w-full max-w-lg" onClick={event => event.stopPropagation()}>
+            <div className="glass-modal max-h-[92vh] w-full max-w-lg overflow-y-auto p-5 sm:p-6" onClick={event => event.stopPropagation()}>
                 <h3 className="text-lg font-bold dark:text-white">교차로 방향 설정</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">기본 4방향에 필요한 접근로를 추가하세요. 선택 수가 교차로 지수로 표시됩니다.</p>
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                    {DEFAULT_DIRECTIONS.map(direction => (
-                        <div key={direction} className="flex items-center gap-3 rounded-2xl border border-white/70 dark:border-white/10 bg-white/55 dark:bg-white/5 px-4 py-3 text-gray-700 dark:text-gray-200">
-                            <MovementArrowIcon direction={direction} type="직진" className="h-6 w-6 text-blue-600 dark:text-blue-300" />
-                            <span className="font-bold">{direction}</span><span className="ml-auto text-xs text-gray-400">기본</span>
-                        </div>
-                    ))}
-                </div>
-                <button type="button" aria-expanded={showDiagonalDirections} onClick={() => setShowDiagonalDirections(value => !value)} className="mt-5 w-full flex items-center justify-between rounded-2xl border border-white/70 dark:border-white/10 bg-white/50 dark:bg-white/5 px-4 py-3 text-sm font-bold text-gray-700 dark:text-gray-200">
-                    <span>추가 접근로 · 현재 {selectedDirections.length}지 교차로 {selectedDiagonalCount ? `(${selectedDiagonalCount}개 추가)` : ''}</span>
-                    {showDiagonalDirections ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                {showDiagonalDirections && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                    {diagonalDirections.map(direction => {
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">실제 접근로 방향만 켜세요. 기본 방향도 끌 수 있어 3지 교차로를 표현할 수 있습니다.</p>
+                <div className="relative mx-auto mt-4 aspect-square w-full max-w-[20rem]" role="group" aria-label="나침반형 교차로 방향 선택">
+                    <div className="absolute inset-[32%] flex flex-col items-center justify-center rounded-full border border-white/80 bg-white/65 text-center shadow-inner backdrop-blur-md dark:border-white/10 dark:bg-white/5">
+                        <strong className="text-2xl text-blue-700 dark:text-blue-300">{selectedDirections.length}지</strong>
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">교차로</span>
+                    </div>
+                    {ALL_DIRECTIONS.map(direction => {
                         const selected = selectedDirections.includes(direction);
                         const inUse = usedDirections.includes(direction);
+                        const minimumReached = selected && selectedDirections.length <= 3;
                         return (
-                            <button key={direction} type="button" aria-pressed={selected} aria-label={`${direction} 방향 ${selected ? '제거' : '추가'}`} disabled={selected && inUse} onClick={() => toggleDirection(direction)} className={`min-h-20 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all ${selected ? 'border-blue-400 bg-blue-100/80 text-blue-700 dark:bg-blue-400/20 dark:text-blue-200' : 'border-white/70 bg-white/50 text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-300'} disabled:opacity-70 disabled:cursor-not-allowed`}>
-                                <MovementArrowIcon direction={direction} type="직진" className="h-8 w-8" />
-                                <span className="font-bold text-sm">{direction}</span>
-                                {inUse && <span className="text-[10px]">사용 중</span>}
+                            <button
+                                key={direction}
+                                type="button"
+                                aria-pressed={selected}
+                                aria-label={`${direction} 방향 ${selected ? '끄기' : '켜기'}`}
+                                disabled={selected && (inUse || minimumReached)}
+                                onClick={() => toggleDirection(direction)}
+                                className={`absolute ${directionPositions[direction]} flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-2xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${selected ? 'border-blue-400 bg-blue-100/90 text-blue-700 shadow-md dark:bg-blue-400/20 dark:text-blue-200' : 'border-dashed border-gray-300 bg-white/35 text-gray-400 opacity-40 grayscale dark:border-gray-600 dark:bg-white/[0.03] dark:text-gray-500'} disabled:cursor-not-allowed`}
+                            >
+                                <MovementArrowIcon direction={direction} type="직진" className="h-7 w-7" />
+                                <span className="text-xs font-bold">{direction}</span>
+                                {inUse && <span className="text-[9px] leading-none">사용 중</span>}
                             </button>
                         );
                     })}
-                </div>}
-                <div className="mt-4 rounded-2xl bg-white/55 dark:bg-white/5 p-3 text-sm text-gray-600 dark:text-gray-300">활성 방향 {orderedDirections.length}개: <strong>{orderedDirections.join(' · ')}</strong></div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />활성</span>
+                    <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />비활성</span>
+                    <span>최소 3개 방향</span>
+                </div>
+                <div className="mt-3 rounded-2xl bg-white/55 p-3 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">활성 방향 {orderedDirections.length}개: <strong>{orderedDirections.join(' · ')}</strong></div>
+                {usedDirections.some(direction => selectedDirections.includes(direction)) && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">‘사용 중’ 방향은 현시와 지도 방향표시에서 먼저 해제해야 끌 수 있습니다.</p>}
                 <div className="mt-5 flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-2xl bg-gray-200 dark:bg-gray-600 font-semibold">취소</button>
                     <button type="button" onClick={() => onSave(orderedDirections)} className="px-5 py-2 rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700">방향 적용</button>
@@ -993,8 +1014,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     ...validPhases.flatMap(phase => phase.movements.map(movement => movement.direction)),
                     ...Object.keys(data.mapIcons || {})
                 ];
-                const savedDirections = Array.isArray(data.directions) ? data.directions : [];
-                const validDirections = ALL_DIRECTIONS.filter(direction => DEFAULT_DIRECTIONS.includes(direction) || savedDirections.includes(direction) || directionsInUse.includes(direction));
+                const validDirections = normalizeDirections(data.directions, directionsInUse);
                 
                 const initialSnapshot = { 
                     location: data.location, 

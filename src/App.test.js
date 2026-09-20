@@ -20,6 +20,7 @@ import {
   getIntersectionStatus,
   isEdgeBackSwipe,
   normalizePhaseMovements,
+  normalizeDirections,
   reattachMapMarker,
 } from './App';
 
@@ -140,15 +141,30 @@ test('renders permissive left turns in amber and protected movements in green', 
   expect(screen.getByText('SB 좌회전')).toHaveClass('text-amber-700');
 });
 
-test('adds diagonal approaches and reports an exact intersection leg count', () => {
+test('toggles cardinal and diagonal approaches on a compass and reports the exact leg count', () => {
   const onSave = jest.fn();
   render(<DirectionSettingsModal directions={['SB', 'NB', 'EB', 'WB']} onSave={onSave} onClose={() => {}} />);
-  expect(screen.queryByRole('button', { name: 'SWB 방향 추가' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /추가 접근로/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'SWB 방향 추가' }));
-  fireEvent.click(screen.getByRole('button', { name: 'SEB 방향 추가' }));
+  expect(screen.getByRole('group', { name: '나침반형 교차로 방향 선택' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'SWB 방향 켜기' })).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(screen.getByRole('button', { name: 'SWB 방향 켜기' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SEB 방향 켜기' }));
+  fireEvent.click(screen.getByRole('button', { name: 'WB 방향 끄기' }));
   fireEvent.click(screen.getByRole('button', { name: '방향 적용' }));
-  expect(onSave).toHaveBeenCalledWith(['SB', 'SWB', 'WB', 'NB', 'EB', 'SEB']);
+  expect(onSave).toHaveBeenCalledWith(['SB', 'SWB', 'NB', 'EB', 'SEB']);
+});
+
+test('allows a four-leg intersection to become three-leg but prevents fewer than three directions', () => {
+  const onSave = jest.fn();
+  render(<DirectionSettingsModal directions={['SB', 'NB', 'EB', 'WB']} onSave={onSave} onClose={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'WB 방향 끄기' }));
+  expect(screen.getByRole('button', { name: 'EB 방향 끄기' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '방향 적용' }));
+  expect(onSave).toHaveBeenCalledWith(['SB', 'NB', 'EB']);
+});
+
+test('preserves a saved three-leg configuration instead of restoring all four defaults', () => {
+  expect(normalizeDirections(['SB', 'NB', 'EB'])).toEqual(['SB', 'NB', 'EB']);
+  expect(normalizeDirections(undefined)).toEqual(['SB', 'WB', 'NB', 'EB']);
 });
 
 test('preserves valid duplicate movements used by special intersections', () => {
