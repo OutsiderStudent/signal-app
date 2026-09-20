@@ -64,7 +64,6 @@ test('reserves header space for settings and keeps the full project back label',
     />,
   );
   expect(screen.getByRole('heading', { name: '프로젝트' }).parentElement).toHaveClass('grid-cols-[3rem_minmax(0,1fr)_3rem]');
-  expect(screen.getByText('프로젝트를 선택하거나 새로 만드세요.')).toHaveClass('px-12');
   unmount();
 
   render(

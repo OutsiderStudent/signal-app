@@ -1973,7 +1973,7 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">프로젝트</h1>
                     <div className="h-12 w-12" aria-hidden="true" />
                 </div>
-                <p className="mt-1 px-12 text-sm text-gray-600 dark:text-gray-400 sm:px-0 sm:text-base">프로젝트를 선택하거나 새로 만드세요.</p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 sm:text-base">프로젝트를 선택하거나 새로 만드세요.</p>
             </header>
             <div className="mb-4">
                 <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
