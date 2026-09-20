@@ -15,6 +15,6 @@
   "orientation": "portrait-primary",
   "lang": "ko-KR",
   "description": "교차로 위치, 접근로 방향, 신호 현시와 시간을 현장에서 기록합니다.",
-  "theme_color": "#2563eb",
-  "background_color": "#f9fafb"
+  "theme_color": "#eef5ff",
+  "background_color": "#eef5ff"
 }

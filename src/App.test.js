@@ -5,6 +5,7 @@ import {
   DirectionSettingsModal,
   IntersectionList,
   MovementArrowIcon,
+  OverflowingName,
   PhaseMovementSummary,
   PhaseSelectionModal,
   ProjectIntersectionMap,
@@ -19,6 +20,13 @@ import {
   normalizePhaseMovements,
   reattachMapMarker,
 } from './App';
+
+test('keeps names in a two-line overflow container with the full title available', () => {
+  const name = '아주 긴 프로젝트 및 교차로 이름 전체 내용';
+  const { container } = render(<OverflowingName>{name}</OverflowingName>);
+  expect(container.querySelector('.overflowing-name')).toHaveAttribute('title', name);
+  expect(screen.getByText(name)).toHaveClass('overflowing-name__clamp');
+});
 
 const settingsProps = {
   isOpen: true,

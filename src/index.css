@@ -5,6 +5,7 @@
 @layer base {
   :root {
     color-scheme: light;
+    background-color: #eef5ff;
     --glass-bg: rgba(255, 255, 255, 0.64);
     --glass-border: rgba(255, 255, 255, 0.78);
     --glass-shadow: 0 18px 55px rgba(39, 76, 119, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.84);
@@ -12,18 +13,28 @@
 
   .dark {
     color-scheme: dark;
+    background-color: #0d1118;
     --glass-bg: rgba(15, 23, 42, 0.66);
     --glass-border: rgba(255, 255, 255, 0.12);
     --glass-shadow: 0 22px 65px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
-  body {
+  html,
+  body,
+  #root {
     margin: 0;
     min-width: 320px;
+    min-height: 100%;
+  }
+
+  body {
     min-height: 100vh;
+    min-height: 100dvh;
     -webkit-font-smoothing: antialiased;
     background: #eef5ff;
   }
+
+  .dark body { background: #0d1118; }
 }
 
 @layer components {
@@ -31,6 +42,11 @@
     position: relative;
     isolation: isolate;
     min-height: 100vh;
+    min-height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
     background:
       radial-gradient(circle at 12% 4%, rgba(99, 102, 241, 0.24), transparent 31rem),
       radial-gradient(circle at 92% 20%, rgba(45, 212, 191, 0.20), transparent 29rem),
@@ -99,10 +115,61 @@
 
   .soft-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(37, 74, 117, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
   .soft-button:active { transform: scale(0.985); }
+
+  .survey-datetime-input {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .survey-datetime-input::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: center;
+  }
+
+  .overflowing-name {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    line-height: 1.45;
+  }
+
+  .overflowing-name__clamp {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .overflowing-name__track {
+    display: block;
+    width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    animation: overflowing-name-scroll var(--marquee-duration, 14s) ease-in-out infinite alternate;
+    will-change: transform;
+  }
+}
+
+@keyframes overflowing-name-scroll {
+  0%, 16% { transform: translateX(0); }
+  84%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  .overflowing-name__track {
+    display: -webkit-box;
+    width: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    animation: none;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {

@@ -13,6 +13,93 @@ const isGoogleMapsApiKeyConfigured = Boolean(
     GOOGLE_MAPS_API_KEY && !GOOGLE_MAPS_API_KEY.includes('YOUR_GOOGLE_MAPS_API_KEY')
 );
 
+export const OverflowingName = ({ children, className = '' }) => {
+    const text = String(children ?? '');
+    const containerRef = useRef(null);
+    const textRef = useRef(null);
+    const [marquee, setMarquee] = useState({ active: false, distance: 0, duration: 12 });
+
+    useEffect(() => {
+        const container = containerRef.current;
+        const node = textRef.current;
+        if (!container || !node) return undefined;
+
+        const measure = () => {
+            const availableWidth = container.clientWidth;
+            if (!availableWidth) return;
+
+            const computed = window.getComputedStyle(node);
+            const probe = node.cloneNode(true);
+            probe.className = node.className.replace('overflowing-name__track', 'overflowing-name__clamp');
+            Object.assign(probe.style, {
+                position: 'fixed',
+                left: '-10000px',
+                top: '0',
+                visibility: 'hidden',
+                pointerEvents: 'none',
+                animation: 'none',
+                transform: 'none',
+                display: 'block',
+                overflow: 'visible',
+                width: `${availableWidth}px`,
+                maxHeight: 'none',
+                WebkitLineClamp: 'unset',
+                whiteSpace: 'normal',
+                fontFamily: computed.fontFamily,
+                fontSize: computed.fontSize,
+                fontWeight: computed.fontWeight,
+                letterSpacing: computed.letterSpacing,
+                lineHeight: computed.lineHeight,
+            });
+            document.body.appendChild(probe);
+
+            const fontSize = parseFloat(computed.fontSize) || 18;
+            const parsedLineHeight = parseFloat(computed.lineHeight);
+            const lineHeight = Number.isFinite(parsedLineHeight) ? parsedLineHeight : fontSize * 1.45;
+            const exceedsTwoLines = probe.scrollHeight > lineHeight * 2 + 1;
+
+            probe.style.width = 'max-content';
+            probe.style.whiteSpace = 'nowrap';
+            const fullWidth = Math.ceil(probe.getBoundingClientRect().width);
+            probe.remove();
+
+            const distance = Math.max(0, fullWidth - availableWidth);
+            const active = exceedsTwoLines && distance > 0;
+            const duration = Math.max(12, Math.min(32, distance / 22 + 8));
+            setMarquee(previous => (
+                previous.active === active && previous.distance === distance && previous.duration === duration
+                    ? previous
+                    : { active, distance, duration }
+            ));
+        };
+
+        measure();
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+        observer?.observe(container);
+        window.addEventListener('resize', measure);
+        document.fonts?.ready?.then(measure).catch(() => {});
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', measure);
+        };
+    }, [text]);
+
+    return (
+        <div ref={containerRef} className={`overflowing-name ${className}`} title={text}>
+            <span
+                ref={textRef}
+                className={marquee.active ? 'overflowing-name__track' : 'overflowing-name__clamp'}
+                style={marquee.active ? {
+                    '--marquee-distance': `${marquee.distance}px`,
+                    '--marquee-duration': `${marquee.duration}s`,
+                } : undefined}
+            >
+                {text}
+            </span>
+        </div>
+    );
+};
+
 // --- Firebase Configuration ---
 const localFirebaseConfig = {
     apiKey: "AIzaSyCwJJH0a6EHcCotHhH597oeGK6eYRnc1T8",
@@ -1312,15 +1399,15 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 <div className="flex items-center justify-between">
                     <button onClick={handleBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all"><ArrowLeft size={20} /> 목록으로</button>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-center mt-2 truncate">{details.number}. {details.name}</h1>
+                <OverflowingName className="mx-auto mt-2 max-w-full text-center text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{details.number}. {details.name}</OverflowingName>
             </header>
 
             <section className="content-surface mb-4 grid gap-3 p-3 sm:grid-cols-2 sm:p-4" aria-label="조사 기본정보">
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">조사자
                     <input value={surveyor} onChange={event => setSurveyor(event.target.value)} placeholder="조사자 이름" className="mt-1 min-h-11 w-full rounded-2xl border border-white/70 bg-white/60 px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
                 </label>
-                <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">조사 일시
-                    <input type="datetime-local" value={surveyedAt} onChange={event => setSurveyedAt(event.target.value)} className="mt-1 min-h-11 w-full rounded-2xl border border-white/70 bg-white/60 px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                <label className="min-w-0 overflow-hidden text-xs font-semibold text-gray-600 dark:text-gray-300">조사 일시
+                    <input type="datetime-local" value={surveyedAt} onChange={event => setSurveyedAt(event.target.value)} className="survey-datetime-input mt-1 block min-h-11 w-full min-w-0 max-w-full rounded-2xl border border-white/70 bg-white/60 px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
                 </label>
             </section>
 
@@ -1736,10 +1823,10 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-4 cursor-pointer" onClick={() => onSelect(intersection)}>
+                                            <div className="flex min-w-0 items-center gap-4 cursor-pointer" onClick={() => onSelect(intersection)}>
                                                 <div className={`flex-shrink-0 w-12 h-12 font-bold rounded-2xl flex items-center justify-center text-lg ${getIntersectionStatus(intersection) === '조사완료' ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300' : 'bg-amber-100/90 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300'}`}>{intersection.number}</div>
-                                                <div className="flex-grow">
-                                                    <p className="font-semibold text-lg text-gray-800 dark:text-gray-200">{intersection.name}</p>
+                                                <div className="min-w-0 flex-grow">
+                                                    <OverflowingName className="text-lg font-semibold text-gray-800 dark:text-gray-200">{intersection.name}</OverflowingName>
                                                     <p className="text-sm text-gray-500 dark:text-gray-400">{getIntersectionStatus(intersection)} · {intersection.directions?.length || DEFAULT_DIRECTIONS.length}지 교차로</p>
                                                 </div>
                                                 <button type="button" aria-label={`${intersection.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[intersection.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(intersection.id); }} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
@@ -1849,7 +1936,7 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                                 >
                                     <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                         {editingId === project.id ? (
-                                            <div className="flex items-center gap-4">
+                                            <div className="flex min-w-0 items-center gap-4">
                                                 <Folder size={24} className="text-blue-500 flex-shrink-0" />
                                                 <input 
                                                     type="text" 
@@ -1866,14 +1953,14 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-4">
-                                                <div className="flex-grow flex items-center gap-4 cursor-pointer" onClick={() => onSelect(project.id)}>
+                                                <div className="min-w-0 flex-grow flex items-center gap-4 cursor-pointer" onClick={() => onSelect(project.id)}>
                                                     <Folder size={24} className="text-blue-500 flex-shrink-0" />
-                                                    <div className="flex-grow">
-                                                        <p className="font-semibold text-lg text-gray-800 dark:text-gray-200">{project.name}</p>
+                                                    <div className="min-w-0 flex-grow">
+                                                        <OverflowingName className="text-lg font-semibold text-gray-800 dark:text-gray-200">{project.name}</OverflowingName>
                                                         <p className="text-sm text-gray-500 dark:text-gray-400">생성일: {project.createdAt?.toDate ? new Date(project.createdAt.toDate()).toLocaleDateString() : '날짜 정보 없음'}</p>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-1">
+                                                <div className="flex flex-shrink-0 items-center gap-1">
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'up'); }} disabled={index === 0} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowUp size={18} /></button>
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'down'); }} disabled={index === projects.length - 1} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowDown size={18} /></button>
                                                     <button type="button" aria-label={`${project.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[project.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(project.id); }} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
@@ -1937,6 +2024,7 @@ export default function App() {
         } else {
             document.documentElement.classList.remove('dark');
         }
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDarkMode ? '#0d1118' : '#eef5ff');
         localStorage.setItem('darkMode', isDarkMode);
     }, [isDarkMode]);
 
