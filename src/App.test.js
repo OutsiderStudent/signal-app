@@ -52,7 +52,7 @@ test('keeps the project creation date on one line', () => {
   expect(screen.getByText(/생성일:/)).toHaveClass('whitespace-nowrap');
 });
 
-test('reserves header space for settings and keeps the full project back label', () => {
+test('places list navigation above the centered title and keeps controls equally tall', () => {
   const { unmount } = render(
     <ProjectList
       projects={[]}
@@ -77,8 +77,10 @@ test('reserves header space for settings and keeps the full project back label',
     />,
   );
   const backButton = screen.getByRole('button', { name: '프로젝트' });
-  expect(backButton).toHaveClass('whitespace-nowrap');
+  expect(backButton).toHaveClass('h-12', 'whitespace-nowrap');
   expect(backButton.querySelector('span')).not.toHaveClass('truncate');
+  expect(screen.getByRole('heading', { name: '교차로 목록' })).toHaveClass('text-center', 'mt-2');
+  expect(backButton.parentElement).toHaveClass('justify-between', 'h-12');
 });
 
 test('toggles project actions with the more button', () => {

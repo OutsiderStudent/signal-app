@@ -1420,12 +1420,13 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     if (!details) return <div className="p-6 text-center dark:text-gray-300">교차로 정보를 불러오는 중...</div>;
 
     return (
-        <div className="p-3 pb-28 sm:p-6 sm:pb-28 lg:p-8 lg:pb-28 max-w-5xl mx-auto">
+        <div className="px-3 pb-28 pt-4 sm:p-6 sm:pb-28 lg:p-8 lg:pb-28 max-w-5xl mx-auto">
             {isPhaseModalOpen && editingIndex !== null && <PhaseSelectionModal directions={directions} initialMovements={phases[editingIndex]?.movements || []} isPermissive={phases[editingIndex]?.isPermissive || false} onClose={() => { setIsPhaseModalOpen(false); setEditingIndex(null); }} onSave={handleSavePhaseMovements} />}
             {isDirectionSettingsOpen && <DirectionSettingsModal directions={directions} usedDirections={[...new Set([...phases.flatMap(phase => phase.movements.map(movement => movement.direction)), ...Object.keys(mapIcons)])]} onClose={() => setIsDirectionSettingsOpen(false)} onSave={handleSaveDirections} />}
             <header className="mb-4 sm:mb-6">
                 <div className="flex items-center justify-between">
-                    <button onClick={handleBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all"><ArrowLeft size={20} /> 목록으로</button>
+                    <button onClick={handleBack} className="glass-toolbar flex h-12 items-center gap-2 whitespace-nowrap px-3 text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10"><ArrowLeft size={20} /> 목록으로</button>
+                    <div className="h-12 w-12" aria-hidden="true" />
                 </div>
                 <div className="mx-auto mt-2 flex w-fit max-w-full items-start justify-center gap-1 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl" title={`${details.number}. ${details.name}`}>
                     <span className="flex-shrink-0">{details.number}.</span>
@@ -1823,14 +1824,14 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
             <header className="mb-4 sm:mb-6">
-                <div className="grid min-h-12 grid-cols-[auto_minmax(0,1fr)_3rem] items-center gap-2">
-                    <button onClick={onBack} className="glass-toolbar z-10 flex min-h-11 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10 sm:gap-2 sm:text-base">
+                <div className="flex h-12 items-center justify-between">
+                    <button onClick={onBack} className="glass-toolbar z-10 flex h-12 items-center gap-2 whitespace-nowrap px-3 text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10">
                         <ArrowLeft size={20} className="flex-shrink-0" />
                         <span>프로젝트</span>
                     </button>
-                    <h1 className="justify-self-center whitespace-nowrap text-xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
-                    <div className="h-12 w-12 justify-self-end" aria-hidden="true" />
+                    <div className="h-12 w-12" aria-hidden="true" />
                 </div>
+                <h1 className="mt-2 text-center text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
                 <p className="mt-1 text-center text-sm text-gray-600 dark:text-gray-400">조사할 교차로를 선택하거나 추가하세요.</p>
             </header>
             <ProjectIntersectionMap intersections={intersections} onSelect={onSelect} />
@@ -2420,7 +2421,7 @@ export default function App() {
                 appId={appId}
             />
             <div className="app-floating-settings absolute right-4 z-40">
-                <button onClick={() => setIsSettingsOpen(true)} aria-label="설정 열기" className="glass-toolbar p-3 hover:bg-white/80 dark:hover:bg-white/10 transition-all">
+                <button onClick={() => setIsSettingsOpen(true)} aria-label="설정 열기" className="glass-toolbar flex h-12 w-12 items-center justify-center p-0 transition-all hover:bg-white/80 dark:hover:bg-white/10">
                     <Settings size={24} />
                 </button>
             </div>
