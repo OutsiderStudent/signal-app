@@ -1771,6 +1771,16 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
         }
     }
 
+    const toggleActionMenu = (id) => {
+        const isOpen = swipedId === id;
+        Object.entries(itemRefs.current).forEach(([key, item]) => {
+            if (item && (key !== id || isOpen)) item.style.transform = '';
+        });
+        const target = itemRefs.current[id];
+        if (target && !isOpen) target.style.transform = 'translateX(-128px)';
+        setSwipedId(isOpen ? null : id);
+    };
+
     const startEditing = (intersection) => {
         setEditingId(intersection.id);
         setEditingNumber(String(intersection.number));
@@ -1837,7 +1847,7 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
                                                     <OverflowingName className="text-lg font-semibold text-gray-800 dark:text-gray-200">{intersection.name}</OverflowingName>
                                                     <p className="text-sm text-gray-500 dark:text-gray-400">{getIntersectionStatus(intersection)} · {intersection.directions?.length || DEFAULT_DIRECTIONS.length}지 교차로</p>
                                                 </div>
-                                                <button type="button" aria-label={`${intersection.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[intersection.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(intersection.id); }} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
+                                                <button type="button" aria-label={`${intersection.name} 작업 메뉴`} aria-expanded={swipedId === intersection.id} onClick={event => { event.stopPropagation(); toggleActionMenu(intersection.id); }} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
                                             </div>
                                         )}
                                     </div>
@@ -1897,6 +1907,16 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
             if (swipedId === id) setSwipedId(null);
         }
     }
+
+    const toggleActionMenu = (id) => {
+        const isOpen = swipedId === id;
+        Object.entries(itemRefs.current).forEach(([key, item]) => {
+            if (item && (key !== id || isOpen)) item.style.transform = '';
+        });
+        const target = itemRefs.current[id];
+        if (target && !isOpen) target.style.transform = 'translateX(-128px)';
+        setSwipedId(isOpen ? null : id);
+    };
 
     const startEditing = (project) => {
         setEditingId(project.id);
@@ -1971,7 +1991,7 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
                                                 <div className="flex flex-shrink-0 items-center gap-1">
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'up'); }} disabled={index === 0} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowUp size={18} /></button>
                                                     <button onClick={(e) => { e.stopPropagation(); onMove(index, 'down'); }} disabled={index === projects.length - 1} className="p-2 text-gray-500 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-full disabled:opacity-30 disabled:cursor-not-allowed"><ArrowDown size={18} /></button>
-                                                    <button type="button" aria-label={`${project.name} 작업 메뉴`} onClick={event => { event.stopPropagation(); const target = itemRefs.current[project.id]; if (target) target.style.transform = 'translateX(-128px)'; setSwipedId(project.id); }} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
+                                                    <button type="button" aria-label={`${project.name} 작업 메뉴`} aria-expanded={swipedId === project.id} onClick={event => { event.stopPropagation(); toggleActionMenu(project.id); }} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"><MoreHorizontal size={22}/></button>
                                                 </div>
                                             </div>
                                         )}

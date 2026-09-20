@@ -51,6 +51,25 @@ test('keeps the project creation date on one line', () => {
   expect(screen.getByText(/생성일:/)).toHaveClass('whitespace-nowrap');
 });
 
+test('toggles project actions with the more button', () => {
+  render(
+    <ProjectList
+      projects={[{ id: 'p1', name: '현장조사', createdAt: { toDate: () => new Date('2026-09-20T00:00:00') } }]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onMove={() => {}}
+    />,
+  );
+  const menuButton = screen.getByRole('button', { name: '현장조사 작업 메뉴' });
+  fireEvent.click(menuButton);
+  expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(menuButton);
+  expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: '현장조사 편집', hidden: true })).toHaveAttribute('tabindex', '-1');
+});
+
 const settingsProps = {
   isOpen: true,
   onClose: () => {},
@@ -220,6 +239,39 @@ test('keeps intersection edit actions hidden until a real left swipe', () => {
   expect(editButton).toHaveAttribute('tabindex', '0');
   expect(editButton.parentElement).toHaveClass('opacity-100');
   expect(foreground).toHaveStyle({ transform: 'translateX(-128px)' });
+
+  fireEvent.touchStart(foreground, { targetTouches: [{ clientX: 120 }] });
+  fireEvent.touchMove(foreground, { targetTouches: [{ clientX: 220 }] });
+  fireEvent.touchEnd(foreground);
+
+  expect(editButton).toHaveAttribute('tabindex', '-1');
+  expect(editButton.parentElement).toHaveClass('opacity-0', 'pointer-events-none');
+  expect(foreground.style.transform).toBe('');
+});
+
+test('toggles intersection actions closed when the more button is pressed again', () => {
+  const intersection = { id: 'i1', number: 1, name: '시청 교차로', location: null };
+  const { container } = render(
+    <IntersectionList
+      intersections={[intersection]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onBack={() => {}}
+    />,
+  );
+  const menuButton = screen.getByRole('button', { name: '시청 교차로 작업 메뉴' });
+  const foreground = screen.getByText('시청 교차로').closest('li').querySelector('.z-10');
+
+  fireEvent.click(menuButton);
+  expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+  expect(foreground).toHaveStyle({ transform: 'translateX(-128px)' });
+
+  fireEvent.click(menuButton);
+  expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+  expect(foreground.style.transform).toBe('');
+  expect(container.querySelector('[aria-label="시청 교차로 편집"]').parentElement).toHaveClass('opacity-0', 'pointer-events-none');
 });
 
 test('summarizes located intersections and explains missing locations on the project map', () => {
