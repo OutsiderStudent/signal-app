@@ -8,6 +8,7 @@ import {
   OverflowingName,
   PhaseMovementSummary,
   PhaseSelectionModal,
+  ProjectList,
   ProjectIntersectionMap,
   SettingsModal,
   buildExportCsv,
@@ -17,6 +18,7 @@ import {
   formatPhaseMovements,
   formatSavedAt,
   getIntersectionStatus,
+  isEdgeBackSwipe,
   normalizePhaseMovements,
   reattachMapMarker,
 } from './App';
@@ -26,6 +28,27 @@ test('keeps names in a two-line overflow container with the full title available
   const { container } = render(<OverflowingName>{name}</OverflowingName>);
   expect(container.querySelector('.overflowing-name')).toHaveAttribute('title', name);
   expect(screen.getByText(name)).toHaveClass('overflowing-name__clamp');
+});
+
+test('recognizes only a deliberate right swipe from the left screen edge as back navigation', () => {
+  expect(isEdgeBackSwipe({ x: 12, y: 200 }, { x: 110, y: 215 })).toBe(true);
+  expect(isEdgeBackSwipe({ x: 80, y: 200 }, { x: 190, y: 205 })).toBe(false);
+  expect(isEdgeBackSwipe({ x: 12, y: 200 }, { x: 60, y: 205 })).toBe(false);
+  expect(isEdgeBackSwipe({ x: 12, y: 200 }, { x: 120, y: 290 })).toBe(false);
+});
+
+test('keeps the project creation date on one line', () => {
+  render(
+    <ProjectList
+      projects={[{ id: 'p1', name: '긴 프로젝트 이름', createdAt: { toDate: () => new Date('2026-09-20T00:00:00') } }]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onMove={() => {}}
+    />,
+  );
+  expect(screen.getByText(/생성일:/)).toHaveClass('whitespace-nowrap');
 });
 
 const settingsProps = {

@@ -47,6 +47,7 @@
     padding-right: env(safe-area-inset-right, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: env(safe-area-inset-left, 0px);
+    touch-action: pan-y pinch-zoom;
     background:
       radial-gradient(circle at 12% 4%, rgba(99, 102, 241, 0.24), transparent 31rem),
       radial-gradient(circle at 92% 20%, rgba(45, 212, 191, 0.20), transparent 29rem),
@@ -149,14 +150,14 @@
     width: max-content;
     max-width: none;
     white-space: nowrap;
-    animation: overflowing-name-scroll var(--marquee-duration, 14s) ease-in-out infinite alternate;
+    animation: overflowing-name-scroll var(--marquee-duration, 14s) linear infinite;
     will-change: transform;
   }
 }
 
 @keyframes overflowing-name-scroll {
   0%, 16% { transform: translateX(0); }
-  84%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
+  92%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
 }
 
 @media (prefers-reduced-motion: reduce) {

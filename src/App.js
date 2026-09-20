@@ -100,6 +100,14 @@ export const OverflowingName = ({ children, className = '' }) => {
     );
 };
 
+export const isEdgeBackSwipe = (start, end) => Boolean(
+    start
+    && end
+    && start.x <= 36
+    && end.x - start.x >= 72
+    && Math.abs(end.y - start.y) <= 60
+);
+
 // --- Firebase Configuration ---
 const localFirebaseConfig = {
     apiKey: "AIzaSyCwJJH0a6EHcCotHhH597oeGK6eYRnc1T8",
@@ -1843,7 +1851,7 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
     );
 };
 
-const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) => {
+export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) => {
     const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState('');
     const [swipedId, setSwipedId] = useState(null);
@@ -1957,7 +1965,7 @@ const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMove }) =>
                                                     <Folder size={24} className="text-blue-500 flex-shrink-0" />
                                                     <div className="min-w-0 flex-grow">
                                                         <OverflowingName className="text-lg font-semibold text-gray-800 dark:text-gray-200">{project.name}</OverflowingName>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400">생성일: {project.createdAt?.toDate ? new Date(project.createdAt.toDate()).toLocaleDateString() : '날짜 정보 없음'}</p>
+                                                        <p className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">생성일: {project.createdAt?.toDate ? new Date(project.createdAt.toDate()).toLocaleDateString() : '날짜 정보 없음'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-shrink-0 items-center gap-1">
@@ -2006,6 +2014,7 @@ export default function App() {
         window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
     ));
     const [updateRegistration, setUpdateRegistration] = useState(null);
+    const edgeSwipeStartRef = useRef(null);
     const isIos = /iPad|iPhone|iPod/i.test(navigator.userAgent)
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
@@ -2283,12 +2292,40 @@ export default function App() {
         setView('intersections');
     }, []);
 
+    const handleAppTouchStart = useCallback(event => {
+        const touch = event.touches?.[0];
+        if (!touch || document.querySelector('.glass-backdrop')) {
+            edgeSwipeStartRef.current = null;
+            return;
+        }
+        edgeSwipeStartRef.current = touch.clientX <= 36
+            ? { x: touch.clientX, y: touch.clientY }
+            : null;
+    }, []);
+
+    const handleAppTouchEnd = useCallback(event => {
+        const start = edgeSwipeStartRef.current;
+        edgeSwipeStartRef.current = null;
+        const touch = event.changedTouches?.[0];
+        if (!touch || !isEdgeBackSwipe(start, { x: touch.clientX, y: touch.clientY })) return;
+
+        if (view === 'detail') {
+            backToIntersections();
+        } else if (view === 'intersections') {
+            backToProjects();
+        }
+    }, [view, backToIntersections, backToProjects]);
+
     // --- Render Logic ---
     if (loading) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 dark:text-gray-300">Loading...</div>;
     if (error) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 text-red-500">{error}</div>;
     
     return (
-        <div className="app-shell font-sans text-gray-800 dark:text-gray-200">
+        <div
+            className="app-shell font-sans text-gray-800 dark:text-gray-200"
+            onTouchStartCapture={handleAppTouchStart}
+            onTouchEndCapture={handleAppTouchEnd}
+        >
             <AddProjectModal
                 isOpen={isAddProjectModalOpen}
                 onClose={() => setIsAddProjectModalOpen(false)}
