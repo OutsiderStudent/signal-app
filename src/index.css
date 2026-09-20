@@ -39,11 +39,12 @@
 
 @layer components {
   .app-shell {
+    --app-safe-top: max(env(safe-area-inset-top, 0px), 0.75rem);
     position: relative;
     isolation: isolate;
     min-height: 100vh;
     min-height: 100dvh;
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--app-safe-top);
     padding-right: env(safe-area-inset-right, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: env(safe-area-inset-left, 0px);
@@ -53,6 +54,14 @@
       radial-gradient(circle at 92% 20%, rgba(45, 212, 191, 0.20), transparent 29rem),
       linear-gradient(145deg, #f7faff 0%, #e9f3ff 46%, #f5f1ff 100%);
     background-attachment: fixed;
+  }
+
+  .app-floating-settings {
+    top: calc(var(--app-safe-top) + 1rem);
+  }
+
+  .app-floating-status {
+    top: calc(var(--app-safe-top) + 0.75rem);
   }
 
   .dark .app-shell {

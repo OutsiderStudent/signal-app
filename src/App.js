@@ -1815,18 +1815,15 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
             <header className="mb-4 sm:mb-6">
-                <div className="relative h-8 z-10">
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2">
-                        <button onClick={onBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all">
-                            <ArrowLeft size={20} />
-                            프로젝트
-                        </button>
-                    </div>
+                <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+                    <button onClick={onBack} className="glass-toolbar z-10 flex min-h-11 w-fit max-w-full items-center gap-1.5 px-3 py-2 text-sm text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10 sm:gap-2 sm:text-base">
+                        <ArrowLeft size={20} className="flex-shrink-0" />
+                        <span className="truncate">프로젝트</span>
+                    </button>
+                    <h1 className="whitespace-nowrap text-xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
+                    <div className="h-12 w-12 justify-self-end" aria-hidden="true" />
                 </div>
-                <div className="text-center -mt-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">교차로 목록</h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">조사할 교차로를 선택하거나 추가하세요.</p>
-                </div>
+                <p className="mt-1 text-center text-sm text-gray-600 dark:text-gray-400">조사할 교차로를 선택하거나 추가하세요.</p>
             </header>
             <ProjectIntersectionMap intersections={intersections} onSelect={onSelect} />
             <div className="mb-4">
@@ -2404,12 +2401,12 @@ export default function App() {
                 userId={userId}
                 appId={appId}
             />
-            <div className="absolute top-4 right-4 z-40">
+            <div className="app-floating-settings absolute right-4 z-40">
                 <button onClick={() => setIsSettingsOpen(true)} aria-label="설정 열기" className="glass-toolbar p-3 hover:bg-white/80 dark:hover:bg-white/10 transition-all">
                     <Settings size={24} />
                 </button>
             </div>
-            {!isOnline && <div className="fixed left-1/2 top-3 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인 · 기기에 임시 저장</div>}
+            {!isOnline && <div className="app-floating-status fixed left-1/2 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인 · 기기에 임시 저장</div>}
             {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전을 사용할 수 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
 
             <main className="pb-20">
