@@ -52,6 +52,36 @@ test('keeps the project creation date on one line', () => {
   expect(screen.getByText(/생성일:/)).toHaveClass('whitespace-nowrap');
 });
 
+test('reserves header space for settings and keeps the full project back label', () => {
+  const { unmount } = render(
+    <ProjectList
+      projects={[]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onMove={() => {}}
+    />,
+  );
+  expect(screen.getByRole('heading', { name: '프로젝트' }).parentElement).toHaveClass('grid-cols-[3rem_minmax(0,1fr)_3rem]');
+  expect(screen.getByText('프로젝트를 선택하거나 새로 만드세요.')).toHaveClass('px-12');
+  unmount();
+
+  render(
+    <IntersectionList
+      intersections={[]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onBack={() => {}}
+    />,
+  );
+  const backButton = screen.getByRole('button', { name: '프로젝트' });
+  expect(backButton).toHaveClass('whitespace-nowrap');
+  expect(backButton.querySelector('span')).not.toHaveClass('truncate');
+});
+
 test('toggles project actions with the more button', () => {
   render(
     <ProjectList

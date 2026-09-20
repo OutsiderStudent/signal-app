@@ -1427,7 +1427,12 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 <div className="flex items-center justify-between">
                     <button onClick={handleBack} className="glass-toolbar flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-white/10 transition-all"><ArrowLeft size={20} /> 목록으로</button>
                 </div>
-                <OverflowingName className="mx-auto mt-2 max-w-full text-center text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{details.number}. {details.name}</OverflowingName>
+                <div className="mx-auto mt-2 flex w-fit max-w-full items-start justify-center gap-1 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl" title={`${details.number}. ${details.name}`}>
+                    <span className="flex-shrink-0">{details.number}.</span>
+                    <div className="min-w-0" style={{ maxWidth: 'min(70vw, 40rem)' }}>
+                        <OverflowingName className="text-left">{details.name}</OverflowingName>
+                    </div>
+                </div>
             </header>
 
             <section className="content-surface mb-4 grid gap-3 p-3 sm:grid-cols-2 sm:p-4" aria-label="조사 기본정보">
@@ -1818,12 +1823,12 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
             <header className="mb-4 sm:mb-6">
-                <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-                    <button onClick={onBack} className="glass-toolbar z-10 flex min-h-11 w-fit max-w-full items-center gap-1.5 px-3 py-2 text-sm text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10 sm:gap-2 sm:text-base">
+                <div className="grid min-h-12 grid-cols-[auto_minmax(0,1fr)_3rem] items-center gap-2">
+                    <button onClick={onBack} className="glass-toolbar z-10 flex min-h-11 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm text-gray-700 transition-all hover:bg-white/80 dark:text-gray-200 dark:hover:bg-white/10 sm:gap-2 sm:text-base">
                         <ArrowLeft size={20} className="flex-shrink-0" />
-                        <span className="truncate">프로젝트</span>
+                        <span>프로젝트</span>
                     </button>
-                    <h1 className="whitespace-nowrap text-xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
+                    <h1 className="justify-self-center whitespace-nowrap text-xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
                     <div className="h-12 w-12 justify-self-end" aria-hidden="true" />
                 </div>
                 <p className="mt-1 text-center text-sm text-gray-600 dark:text-gray-400">조사할 교차로를 선택하거나 추가하세요.</p>
@@ -1963,8 +1968,12 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
             <header className="mb-6 text-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">프로젝트</h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-1">프로젝트를 선택하거나 새로 만드세요.</p>
+                <div className="grid min-h-12 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center gap-2">
+                    <div className="h-12 w-12" aria-hidden="true" />
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">프로젝트</h1>
+                    <div className="h-12 w-12" aria-hidden="true" />
+                </div>
+                <p className="mt-1 px-12 text-sm text-gray-600 dark:text-gray-400 sm:px-0 sm:text-base">프로젝트를 선택하거나 새로 만드세요.</p>
             </header>
             <div className="mb-4">
                 <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
