@@ -71,6 +71,30 @@ test('toggles project actions with the more button', () => {
   expect(screen.getByRole('button', { name: '현장조사 편집', hidden: true })).toHaveAttribute('tabindex', '-1');
 });
 
+test('closes project swipe actions before showing the edit form', () => {
+  const { container } = render(
+    <ProjectList
+      projects={[{ id: 'p1', name: '현장조사', createdAt: { toDate: () => new Date('2026-09-20T00:00:00') } }]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onMove={() => {}}
+    />,
+  );
+  const menuButton = screen.getByRole('button', { name: '현장조사 작업 메뉴' });
+  fireEvent.click(menuButton);
+  const editButton = screen.getByRole('button', { name: '현장조사 편집' });
+  const foreground = editButton.closest('li').querySelector('.z-10');
+  expect(foreground).toHaveStyle({ transform: 'translateX(-128px)' });
+
+  fireEvent.click(editButton);
+
+  expect(foreground.style.transform).toBe('');
+  expect(editButton.parentElement).toHaveClass('opacity-0', 'pointer-events-none');
+  expect(screen.getByRole('textbox', { name: '프로젝트명 편집' })).toBeInTheDocument();
+});
+
 const settingsProps = {
   isOpen: true,
   onClose: () => {},
@@ -288,6 +312,30 @@ test('toggles intersection actions closed when the more button is pressed again'
   expect(menuButton).toHaveAttribute('aria-expanded', 'false');
   expect(foreground.style.transform).toBe('');
   expect(container.querySelector('[aria-label="시청 교차로 편집"]').parentElement).toHaveClass('opacity-0', 'pointer-events-none');
+});
+
+test('closes intersection swipe actions before showing the responsive edit form', () => {
+  const intersection = { id: 'i1', number: 1, name: '시청 교차로', location: null };
+  render(
+    <IntersectionList
+      intersections={[intersection]}
+      onSelect={() => {}}
+      onAdd={() => {}}
+      onDelete={() => {}}
+      onEdit={() => {}}
+      onBack={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '시청 교차로 작업 메뉴' }));
+  const editButton = screen.getByRole('button', { name: '시청 교차로 편집' });
+  const foreground = editButton.closest('li').querySelector('.z-10');
+
+  fireEvent.click(editButton);
+
+  expect(foreground.style.transform).toBe('');
+  expect(editButton.parentElement).toHaveClass('opacity-0', 'pointer-events-none');
+  expect(screen.getByRole('spinbutton', { name: '교차로 번호 편집' })).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: '교차로명 편집' })).toHaveClass('min-w-0', 'w-full');
 });
 
 test('summarizes located intersections and explains missing locations on the project map', () => {

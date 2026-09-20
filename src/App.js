@@ -1802,6 +1802,9 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
     };
 
     const startEditing = (intersection) => {
+        const target = itemRefs.current[intersection.id];
+        if (target) target.style.transform = '';
+        setSwipedId(null);
         setEditingId(intersection.id);
         setEditingNumber(String(intersection.number));
         setEditingName(intersection.name);
@@ -1849,10 +1852,12 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
                                 >
                                     <div className="p-2 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                         {editingId === intersection.id ? (
-                                            <div className="flex flex-col sm:flex-row items-center gap-4 p-2">
-                                                <input type="number" value={editingNumber} onChange={(e) => setEditingNumber(e.target.value)} className="w-20 px-2 py-1 border border-blue-400 rounded-md bg-white dark:bg-gray-700 dark:text-white" autoFocus />
-                                                <input type="text" value={editingName} onChange={(e) => setEditingName(e.target.value)} className="flex-grow px-2 py-1 border border-blue-400 rounded-md bg-white dark:bg-gray-700 dark:text-white" />
-                                                <div className="flex items-center gap-2">
+                                            <div className="grid min-w-0 gap-2 p-1 sm:grid-cols-[5rem_minmax(0,1fr)_auto] sm:items-center sm:p-2">
+                                                <div className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] gap-2 sm:contents">
+                                                    <input type="number" aria-label="교차로 번호 편집" value={editingNumber} onChange={(e) => setEditingNumber(e.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-blue-400 bg-white px-2 py-1 dark:bg-gray-700 dark:text-white" autoFocus />
+                                                    <input type="text" aria-label="교차로명 편집" value={editingName} onChange={(e) => setEditingName(e.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-blue-400 bg-white px-2 py-1 dark:bg-gray-700 dark:text-white" />
+                                                </div>
+                                                <div className="flex items-center justify-end gap-1">
                                                     <button onClick={() => handleSave(intersection.id)} className="p-2 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-full"><Save size={20} /></button>
                                                     <button onClick={cancelEditing} className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"><X size={20} /></button>
                                                 </div>
@@ -1936,6 +1941,9 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
     };
 
     const startEditing = (project) => {
+        const target = itemRefs.current[project.id];
+        if (target) target.style.transform = '';
+        setSwipedId(null);
         setEditingId(project.id);
         setEditingName(project.name);
     };
@@ -1981,17 +1989,18 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
                                 >
                                     <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                         {editingId === project.id ? (
-                                            <div className="flex min-w-0 items-center gap-4">
+                                            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
                                                 <Folder size={24} className="text-blue-500 flex-shrink-0" />
                                                 <input 
                                                     type="text" 
+                                                    aria-label="프로젝트명 편집"
                                                     value={editingName}
                                                     onChange={(e) => setEditingName(e.target.value)}
-                                                    className="flex-grow px-2 py-1 border border-blue-400 rounded-md bg-white dark:bg-gray-700 dark:text-white"
+                                                    className="min-h-11 w-full min-w-0 rounded-xl border border-blue-400 bg-white px-2 py-1 dark:bg-gray-700 dark:text-white"
                                                     autoFocus
                                                     onKeyDown={(e) => e.key === 'Enter' && handleSave(project.id)}
                                                 />
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-shrink-0 items-center gap-0.5">
                                                     <button onClick={() => handleSave(project.id)} className="p-2 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-full"><Save size={20} /></button>
                                                     <button onClick={cancelEditing} className="p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"><X size={20} /></button>
                                                 </div>
