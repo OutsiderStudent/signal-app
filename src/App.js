@@ -755,14 +755,14 @@ const AddProjectModal = ({ isOpen, onClose, onSave, initialName }) => {
 export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDirections = [], onSave, onClose }) => {
     const [selectedDirections, setSelectedDirections] = useState(directions);
     const directionPositions = {
-        NB: 'left-1/2 top-0 -translate-x-1/2',
-        NEB: 'right-[7%] top-[7%]',
-        EB: 'right-0 top-1/2 -translate-y-1/2',
-        SEB: 'right-[7%] bottom-[7%]',
-        SB: 'bottom-0 left-1/2 -translate-x-1/2',
-        SWB: 'bottom-[7%] left-[7%]',
-        WB: 'left-0 top-1/2 -translate-y-1/2',
-        NWB: 'left-[7%] top-[7%]',
+        SB: 'left-1/2 top-0 -translate-x-1/2',
+        SWB: 'right-[7%] top-[7%]',
+        WB: 'right-0 top-1/2 -translate-y-1/2',
+        NWB: 'right-[7%] bottom-[7%]',
+        NB: 'bottom-0 left-1/2 -translate-x-1/2',
+        NEB: 'bottom-[7%] left-[7%]',
+        EB: 'left-0 top-1/2 -translate-y-1/2',
+        SEB: 'left-[7%] top-[7%]',
     };
 
     const toggleDirection = (direction) => {
