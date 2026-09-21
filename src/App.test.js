@@ -23,9 +23,9 @@ import {
   normalizeDirections,
   reattachMapMarker,
   getApproachMarkerPosition,
-  findMapLocation,
   showToast,
 } from './App';
+import { REGION_POINTS, REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
 test('positions new approach markers on the arrival side of the intersection', () => {
   const center = { lat: 37.5665, lng: 126.978 };
@@ -38,16 +38,16 @@ test('positions new approach markers on the arrival side of the intersection', (
   expect(getApproachMarkerPosition(center, 'SWB').lng).toBeGreaterThan(center.lng);
 });
 
-test('searches a named place and falls back to an address when Places has no result', async () => {
-  const location = { toJSON: () => ({ lat: 37.5, lng: 127 }) };
-  const geocode = jest.fn().mockResolvedValue({ results: [{ geometry: { location } }] });
-  const googleMaps = {
-    places: { PlacesServiceStatus: { OK: 'OK' }, PlacesService: class { textSearch(request, callback) { callback([], 'ZERO_RESULTS'); } } },
-    Geocoder: class { geocode = geocode; },
-  };
-  const result = await findMapLocation(googleMaps, { getCenter: () => location }, '서울시청');
-  expect(result).toBe(location);
-  expect(geocode).toHaveBeenCalledWith({ address: '서울시청', region: 'KR' });
+test('offers offline region navigation for all provinces and current municipalities', () => {
+  expect(REGION_PROVINCES).toHaveLength(17);
+  expect(REGION_POINTS.length).toBeGreaterThan(220);
+  expect(getRegionDistricts('인천광역시')).toContain('검단구');
+  expect(getRegionDistricts('인천광역시')).not.toContain('남구');
+  expect(getRegionDistricts('대구광역시')).toContain('군위군');
+  expect(REGION_POINTS.every(([, , lat, lng]) => lat >= 33 && lat <= 39 && lng >= 124 && lng <= 132)).toBe(true);
+  expect(new Set(REGION_POINTS.map(([province, district]) => `${province}/${district}`)).size).toBe(REGION_POINTS.length);
+  expect(getRegionPoint('서울특별시', '강남구')).toEqual({ lat: expect.any(Number), lng: expect.any(Number) });
+  expect(getRegionPoint('서울특별시', '없는 지역')).toBeNull();
 });
 
 test('puts save feedback below the iPhone safe area', () => {

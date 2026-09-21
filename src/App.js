@@ -4,7 +4,8 @@ import { initializeApp } from 'firebase/app';
 import * as XLSX from 'xlsx';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, Search } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal } from 'lucide-react';
+import { REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -200,7 +201,7 @@ const loadGoogleMapsScript = (callback) => {
     const existingScript = document.getElementById('googleMapsScript');
     if (!existingScript) {
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
         script.id = 'googleMapsScript';
         document.body.appendChild(script);
         script.onload = () => {
@@ -289,26 +290,6 @@ export const getApproachMarkerPosition = (center, direction, distanceMeters = 55
         lat: latitude + north * scale / 111320,
         lng: Number(center.lng) + east * scale / (111320 * Math.max(0.01, Math.cos(latitude * Math.PI / 180))),
     };
-};
-
-export const findMapLocation = async (googleMaps, map, query) => {
-    try {
-        const places = googleMaps.places;
-        if (places?.PlacesService) {
-            return await new Promise((resolve, reject) => {
-                new places.PlacesService(map).textSearch({ query, location: map.getCenter(), radius: 50000 }, (results, status) => {
-                    if (status === places.PlacesServiceStatus.OK && results?.[0]?.geometry?.location) resolve(results[0].geometry.location);
-                    else reject(new Error(status || '검색 결과 없음'));
-                });
-            });
-        }
-    } catch (error) {
-        // Places may be unavailable for this API key; an address can still be geocoded.
-    }
-    const response = await new googleMaps.Geocoder().geocode({ address: query, region: 'KR' });
-    const location = response.results?.[0]?.geometry?.location;
-    if (!location) throw new Error('검색 결과 없음');
-    return location;
 };
 
 const directionRotation = { NB: 0, NEB: 45, EB: 90, SEB: 135, SB: 180, SWB: -135, WB: -90, NWB: -45 };
@@ -919,8 +900,12 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [map, setMap] = useState(null);
     const [mapCenter, setMapCenter] = useState(null); // Separate state for map center to avoid re-rendering map on drag
     const [mapTypeId, setMapTypeId] = useState('roadmap');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchState, setSearchState] = useState({ loading: false, message: '' });
+    const [isRegionPickerOpen, setIsRegionPickerOpen] = useState(false);
+    const [regionProvince, setRegionProvince] = useState('');
+    const [regionDistrict, setRegionDistrict] = useState('');
+    const [isRegionPreview, setIsRegionPreview] = useState(false);
+    const regionPreviewRef = useRef(false);
+    const restoreRegionPreviewRef = useRef(false);
     const mapContainerRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const [phases, setPhases] = useState([]);
@@ -949,6 +934,15 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const spatialSaveTimerRef = useRef(null);
     const lastSyncedSpatialRef = useRef({ location: null, mapIcons: {} });
     const spatialSaveVersionRef = useRef(0);
+
+    useEffect(() => {
+        if (!isLocationVisible) {
+            regionPreviewRef.current = false;
+            restoreRegionPreviewRef.current = false;
+            setIsRegionPreview(false);
+            setIsRegionPickerOpen(false);
+        }
+    }, [isLocationVisible]);
     const hasDetails = Boolean(details);
 
     const docRef = useMemo(() => doc(db, `/artifacts/${appId}/users/${userId}/projects/${projectId}/intersections`, intersection.id), [db, appId, userId, projectId, intersection.id]);
@@ -1208,6 +1202,13 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 }
             });
             gMap.addListener('idle', () => {
+                if (regionPreviewRef.current) {
+                    if (restoreRegionPreviewRef.current) {
+                        restoreRegionPreviewRef.current = false;
+                        regionPreviewRef.current = false;
+                    }
+                    return;
+                }
                 const center = gMap.getCenter();
                 if (center) {
                     const nextCenter = center.toJSON();
@@ -1282,6 +1283,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 };
+                regionPreviewRef.current = false;
+                restoreRegionPreviewRef.current = false;
+                setIsRegionPreview(false);
                 if (map) {
                     map.setCenter(newLoc);
                 }
@@ -1292,27 +1296,32 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
         }
     };
 
-    const handlePlaceSearch = async (event) => {
-        event.preventDefault();
-        const query = searchQuery.trim();
-        if (!query || !map || !window.google?.maps) return;
-        setSearchState({ loading: true, message: '' });
+    const handleRegionMove = () => {
+        const position = getRegionPoint(regionProvince, regionDistrict);
+        if (!map || !position) return;
+        regionPreviewRef.current = true;
+        restoreRegionPreviewRef.current = false;
+        setIsRegionPreview(true);
+        setIsRegionPickerOpen(false);
+        map.panTo(position);
+        map.setZoom(12);
+    };
 
-        const foundLocation = (location) => {
-            const coordinates = location.toJSON ? location.toJSON() : { lat: location.lat(), lng: location.lng() };
-            map.panTo(coordinates);
-            setMapCenter(coordinates);
-            setSearchState({ loading: false, message: '' });
-        };
+    const handleRegionCancel = () => {
+        if (!map || !mapCenter) return;
+        restoreRegionPreviewRef.current = true;
+        setIsRegionPreview(false);
+        map.panTo(mapCenter);
+        map.setZoom(17);
+    };
 
-        try {
-            const location = await findMapLocation(window.google.maps, map, query);
-            foundLocation(location);
-        } catch (error) {
-            const needsApiSetup = /REQUEST_DENIED|ApiNotActivated|Geocoding API/i.test(String(error));
-            setSearchState({ loading: false, message: needsApiSetup ? '지도 검색 API를 사용할 수 없습니다. 관리자 설정이 필요합니다.' : '검색할 수 없습니다. 장소명이나 주소를 확인해 주세요.' });
-            console.warn('Map search failed:', error);
-        }
+    const handleRegionPositionApply = () => {
+        const position = map?.getCenter()?.toJSON();
+        if (!position) return;
+        regionPreviewRef.current = false;
+        restoreRegionPreviewRef.current = false;
+        setIsRegionPreview(false);
+        setMapCenter(position);
     };
     
     const addMapIcon = (dir) => {
@@ -1514,20 +1523,22 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                     </div>
                                 }
                             </div>
-                            <form onSubmit={handlePlaceSearch} role="search" className="absolute left-3 top-3 z-10 flex w-[calc(100%-5rem)] max-w-xs items-center rounded-full bg-white shadow-lg dark:bg-gray-800">
-                                <input
-                                    type="search"
-                                    aria-label="지도 장소 또는 주소 검색"
-                                    value={searchQuery}
-                                    onChange={event => { setSearchQuery(event.target.value); if (searchState.message) setSearchState(previous => ({ ...previous, message: '' })); }}
-                                    placeholder="장소 또는 주소 검색"
-                                    className="min-h-11 w-full min-w-0 flex-1 rounded-l-full bg-transparent px-3 text-sm text-gray-900 outline-none dark:text-white"
-                                />
-                                <button type="submit" aria-label="지도 검색 실행" disabled={searchState.loading || !searchQuery.trim()} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-blue-600 disabled:opacity-40 dark:text-blue-300">
-                                    {searchState.loading ? <RefreshCw size={18} className="animate-spin" /> : <Search size={18} />}
-                                </button>
-                            </form>
-                            {searchState.message && <p role="alert" className="absolute left-3 top-16 z-10 max-w-[calc(100%-1.5rem)] rounded-xl bg-white/95 px-3 py-2 text-xs font-semibold text-red-700 shadow-lg dark:bg-gray-800 dark:text-red-300">{searchState.message}</p>}
+                            <button type="button" onClick={() => setIsRegionPickerOpen(open => !open)} aria-expanded={isRegionPickerOpen} aria-controls="region-picker" className="absolute left-3 top-3 z-10 flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-lg dark:bg-gray-800 dark:text-white">
+                                <MapPin size={17} className="text-blue-600" /> 지역으로 이동 <ChevronDown size={16} />
+                            </button>
+                            {isRegionPickerOpen && <div id="region-picker" className="region-picker absolute left-3 top-16 z-20 w-[min(18rem,calc(100%-6rem))] space-y-2 rounded-2xl bg-white/95 p-3 shadow-xl backdrop-blur-lg dark:bg-slate-800/95">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="region-province">시·도</label>
+                                <select id="region-province" value={regionProvince} onChange={event => { setRegionProvince(event.target.value); setRegionDistrict(''); }} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white">
+                                    <option value="">시·도 선택</option>
+                                    {REGION_PROVINCES.map(province => <option key={province} value={province}>{province}</option>)}
+                                </select>
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="region-district">시·군·구</label>
+                                <select id="region-district" value={regionDistrict} disabled={!regionProvince} onChange={event => setRegionDistrict(event.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-white">
+                                    <option value="">시·군·구 선택</option>
+                                    {getRegionDistricts(regionProvince).map(district => <option key={district} value={district}>{district}</option>)}
+                                </select>
+                                <button type="button" onClick={handleRegionMove} disabled={!regionDistrict || !map} className="min-h-11 w-full rounded-xl bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-50">지도 이동</button>
+                            </div>}
                             <div className="absolute top-3 right-3 flex flex-col gap-2">
                                 <button onClick={handleFindMe} title="현재 위치 찾기" aria-label="현재 위치 찾기" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <Crosshair className="text-gray-700 dark:text-gray-300" size={20} />
@@ -1537,6 +1548,11 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 </button>
                             </div>
                         </div>
+                        {isRegionPreview && <div className="region-preview mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 dark:bg-blue-950/70 dark:text-blue-100" role="status">
+                            <span className="w-full">지역으로 이동했습니다. 교차로 위치는 아직 바뀌지 않았습니다.</span>
+                            <button type="button" onClick={handleRegionPositionApply} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 text-white">현재 중심을 교차로 위치로 지정</button>
+                            <button type="button" onClick={handleRegionCancel} className="min-h-11 rounded-xl bg-white px-3 text-blue-800 dark:bg-slate-800 dark:text-blue-100">취소</button>
+                        </div>}
                          <div className="mt-4 p-4 content-surface">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">방향 아이콘 (클릭하여 지도에 추가/삭제)</h3>
@@ -2133,6 +2149,7 @@ export default function App() {
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
     const [view, setView] = useState('projects'); // 'projects', 'intersections', 'detail'
+    const [viewMotion, setViewMotion] = useState('forward');
 
     useEffect(() => {
         const savedDarkMode = localStorage.getItem('darkMode') === 'true';
@@ -2269,6 +2286,7 @@ export default function App() {
     const backToProjects = useCallback(() => {
         setSelectedProjectId(null);
         setSelectedIntersection(null); // Clean up state
+        setViewMotion('back');
         setView('projects');
     }, []);
 
@@ -2393,16 +2411,19 @@ export default function App() {
     // --- Navigation Handlers ---
     const selectProject = (id) => {
         setSelectedProjectId(id);
+        setViewMotion('forward');
         setView('intersections');
     }
 
     const selectIntersection = useCallback((intersection) => {
         setSelectedIntersection(intersection);
+        setViewMotion('forward');
         setView('detail');
     }, []);
 
     const backToIntersections = useCallback(() => {
         setSelectedIntersection(null);
+        setViewMotion('back');
         setView('intersections');
     }, []);
 
@@ -2486,7 +2507,7 @@ export default function App() {
             {!isOnline && <div className="app-floating-status fixed left-1/2 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인 · 기기에 임시 저장</div>}
             {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전을 사용할 수 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
 
-            <main className="pb-20">
+            <main key={view} className={`app-view app-view--${viewMotion} pb-20`}>
                 {view === 'projects' && (
                     <ProjectList
                         projects={projects}

@@ -42,12 +42,14 @@ npm run build
 ## 배포 전 점검
 
 1. 테스트와 프로덕션 빌드가 통과하는지 확인합니다.
-2. Google Maps API 키의 HTTP referrer에 운영 도메인을 등록합니다.
+2. Google Maps API 키의 HTTP referrer에 운영 도메인을 등록합니다. 지역 이동은 앱에 내장된 좌표를 사용하며 Places/Geocoding API를 호출하지 않습니다.
 3. Firebase Authentication의 익명 로그인을 활성화하고 운영 도메인을 허용합니다.
 4. Firestore Security Rules가 사용자 UID별 데이터만 허용하는지 확인합니다.
 5. Netlify Deploy Preview를 확인한 뒤 `main`에 병합합니다.
 
-Firebase 웹 구성값은 클라이언트 식별 정보입니다. 실제 데이터 접근 통제는 Firestore Security Rules와 Firebase App Check로 관리해야 합니다. Google Maps 키는 Firebase 키와 분리하고 Maps/Places API 및 허용 도메인으로 제한합니다.
+Firebase 웹 구성값은 클라이언트 식별 정보입니다. 실제 데이터 접근 통제는 Firestore Security Rules와 Firebase App Check로 관리해야 합니다. Google Maps 키는 Firebase 키와 분리하고 Maps JavaScript API 및 허용 도메인으로 제한합니다.
+
+지역 이동 좌표는 [시·군·구 좌표 공개 자료](https://gist.github.com/hmmhmmhm/b3a950e84f865f8abbd00fa460aa4613)를 바탕으로 하며, 현재 행정구역 명칭을 반영했습니다. 이 좌표는 대략적인 지도 이동용입니다. 교차로 위치는 현장에서 지도 중심을 확인한 뒤 별도로 지정해야 합니다.
 
 ## 모바일 앱
 
