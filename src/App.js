@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 import * as XLSX from 'xlsx';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, Search } from 'lucide-react';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -260,10 +260,10 @@ export const areMapIconsEqual = (left = {}, right = {}) => {
         && leftKeys.every((key, index) => key === rightKeys[index] && areCoordinatesEqual(left[key], right[key]));
 };
 
-const showToast = (message, tone = 'success') => {
+export const showToast = (message, tone = 'success') => {
     const toast = document.createElement('div');
     toast.setAttribute('role', 'status');
-    toast.className = `fixed left-1/2 top-4 z-[70] -translate-x-1/2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur-xl ${tone === 'error' ? 'bg-red-600/95' : 'bg-slate-900/90'}`;
+    toast.className = `app-toast fixed left-1/2 z-[70] w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl px-4 py-2 text-center text-sm font-semibold text-white shadow-xl backdrop-blur-xl ${tone === 'error' ? 'bg-red-600/95' : 'bg-slate-900/90'}`;
     toast.textContent = message;
     document.body.appendChild(toast);
     window.setTimeout(() => toast.remove(), 2200);
@@ -272,6 +272,43 @@ const showToast = (message, tone = 'success') => {
 export const reattachMapMarker = (marker, map, position) => {
     marker.setPosition(position);
     marker.setMap(map);
+};
+
+const approachOffsets = {
+    SB: [1, 0], SWB: [1, 1], WB: [0, 1], NWB: [-1, 1],
+    NB: [-1, 0], NEB: [-1, -1], EB: [0, -1], SEB: [1, -1],
+};
+
+export const getApproachMarkerPosition = (center, direction, distanceMeters = 55) => {
+    const offset = approachOffsets[direction];
+    if (!center || !offset || !Number.isFinite(Number(center.lat)) || !Number.isFinite(Number(center.lng))) return null;
+    const [north, east] = offset;
+    const scale = distanceMeters / Math.hypot(north, east);
+    const latitude = Number(center.lat);
+    return {
+        lat: latitude + north * scale / 111320,
+        lng: Number(center.lng) + east * scale / (111320 * Math.max(0.01, Math.cos(latitude * Math.PI / 180))),
+    };
+};
+
+export const findMapLocation = async (googleMaps, map, query) => {
+    try {
+        const places = googleMaps.places;
+        if (places?.PlacesService) {
+            return await new Promise((resolve, reject) => {
+                new places.PlacesService(map).textSearch({ query, location: map.getCenter(), radius: 50000 }, (results, status) => {
+                    if (status === places.PlacesServiceStatus.OK && results?.[0]?.geometry?.location) resolve(results[0].geometry.location);
+                    else reject(new Error(status || '검색 결과 없음'));
+                });
+            });
+        }
+    } catch (error) {
+        // Places may be unavailable for this API key; an address can still be geocoded.
+    }
+    const response = await new googleMaps.Geocoder().geocode({ address: query, region: 'KR' });
+    const location = response.results?.[0]?.geometry?.location;
+    if (!location) throw new Error('검색 결과 없음');
+    return location;
 };
 
 const directionRotation = { NB: 0, NEB: 45, EB: 90, SEB: 135, SB: 180, SWB: -135, WB: -90, NWB: -45 };
@@ -882,7 +919,8 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [map, setMap] = useState(null);
     const [mapCenter, setMapCenter] = useState(null); // Separate state for map center to avoid re-rendering map on drag
     const [mapTypeId, setMapTypeId] = useState('roadmap');
-    const searchInputRef = useRef(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchState, setSearchState] = useState({ loading: false, message: '' });
     const mapContainerRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const [phases, setPhases] = useState([]);
@@ -1177,18 +1215,6 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 }
             });
 
-            if (searchInputRef.current) {
-                const autocomplete = new window.google.maps.places.Autocomplete(searchInputRef.current);
-                autocomplete.bindTo('bounds', gMap);
-                autocomplete.addListener('place_changed', () => {
-                    const place = autocomplete.getPlace();
-                    if (place.geometry && place.geometry.location) {
-                        const newLoc = place.geometry.location;
-                        gMap.setCenter(newLoc);
-                        setMapCenter(newLoc.toJSON());
-                    }
-                });
-            }
         });
         
         return () => {
@@ -1265,10 +1291,34 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             showAlert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.');
         }
     };
+
+    const handlePlaceSearch = async (event) => {
+        event.preventDefault();
+        const query = searchQuery.trim();
+        if (!query || !map || !window.google?.maps) return;
+        setSearchState({ loading: true, message: '' });
+
+        const foundLocation = (location) => {
+            const coordinates = location.toJSON ? location.toJSON() : { lat: location.lat(), lng: location.lng() };
+            map.panTo(coordinates);
+            setMapCenter(coordinates);
+            setSearchState({ loading: false, message: '' });
+        };
+
+        try {
+            const location = await findMapLocation(window.google.maps, map, query);
+            foundLocation(location);
+        } catch (error) {
+            const needsApiSetup = /REQUEST_DENIED|ApiNotActivated|Geocoding API/i.test(String(error));
+            setSearchState({ loading: false, message: needsApiSetup ? '지도 검색 API를 사용할 수 없습니다. 관리자 설정이 필요합니다.' : '검색할 수 없습니다. 장소명이나 주소를 확인해 주세요.' });
+            console.warn('Map search failed:', error);
+        }
+    };
     
     const addMapIcon = (dir) => {
         if (!map || mapIcons[dir]) return;
-        setMapIcons(prev => ({ ...prev, [dir]: map.getCenter().toJSON() }));
+        const position = getApproachMarkerPosition(map.getCenter().toJSON(), dir);
+        if (position) setMapIcons(prev => ({ ...prev, [dir]: position }));
     };
 
     const removeMapIcon = (dir) => {
@@ -1464,12 +1514,20 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                     </div>
                                 }
                             </div>
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                placeholder="장소 검색..."
-                                className="absolute top-3 left-3 w-1/2 max-w-xs px-4 py-2 bg-white dark:bg-gray-800 dark:text-white rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <form onSubmit={handlePlaceSearch} role="search" className="absolute left-3 top-3 z-10 flex w-[calc(100%-5rem)] max-w-xs items-center rounded-full bg-white shadow-lg dark:bg-gray-800">
+                                <input
+                                    type="search"
+                                    aria-label="지도 장소 또는 주소 검색"
+                                    value={searchQuery}
+                                    onChange={event => { setSearchQuery(event.target.value); if (searchState.message) setSearchState(previous => ({ ...previous, message: '' })); }}
+                                    placeholder="장소 또는 주소 검색"
+                                    className="min-h-11 w-full min-w-0 flex-1 rounded-l-full bg-transparent px-3 text-sm text-gray-900 outline-none dark:text-white"
+                                />
+                                <button type="submit" aria-label="지도 검색 실행" disabled={searchState.loading || !searchQuery.trim()} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-blue-600 disabled:opacity-40 dark:text-blue-300">
+                                    {searchState.loading ? <RefreshCw size={18} className="animate-spin" /> : <Search size={18} />}
+                                </button>
+                            </form>
+                            {searchState.message && <p role="alert" className="absolute left-3 top-16 z-10 max-w-[calc(100%-1.5rem)] rounded-xl bg-white/95 px-3 py-2 text-xs font-semibold text-red-700 shadow-lg dark:bg-gray-800 dark:text-red-300">{searchState.message}</p>}
                             <div className="absolute top-3 right-3 flex flex-col gap-2">
                                 <button onClick={handleFindMe} title="현재 위치 찾기" aria-label="현재 위치 찾기" className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <Crosshair className="text-gray-700 dark:text-gray-300" size={20} />
@@ -1493,7 +1551,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                         </button>
                                     ))}
                                 </div>
-                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">지도에 추가된 아이콘은 드래그하여 위치를 옮길 수 있습니다.</p>
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">아이콘은 교차로 중심 기준 접근로 방향에 놓입니다. 드래그해 실제 위치로 옮길 수 있습니다.</p>
                             </div>
                             <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : spatialSaveState === 'offline' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
                                 {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' || spatialSaveState === 'offline' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}

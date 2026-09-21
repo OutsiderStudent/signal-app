@@ -64,6 +64,10 @@
     top: calc(var(--app-safe-top) + 0.75rem);
   }
 
+  .app-toast {
+    top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  }
+
   .dark .app-shell {
     background: #0d1118;
   }

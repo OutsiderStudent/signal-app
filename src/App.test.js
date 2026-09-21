@@ -22,7 +22,40 @@ import {
   normalizePhaseMovements,
   normalizeDirections,
   reattachMapMarker,
+  getApproachMarkerPosition,
+  findMapLocation,
+  showToast,
 } from './App';
+
+test('positions new approach markers on the arrival side of the intersection', () => {
+  const center = { lat: 37.5665, lng: 126.978 };
+  expect(getApproachMarkerPosition(center, 'SB').lat).toBeGreaterThan(center.lat);
+  expect(getApproachMarkerPosition(center, 'NB').lat).toBeLessThan(center.lat);
+  expect(getApproachMarkerPosition(center, 'EB').lng).toBeLessThan(center.lng);
+  expect(getApproachMarkerPosition(center, 'WB').lng).toBeGreaterThan(center.lng);
+  expect(getApproachMarkerPosition(center, 'SWB')).toEqual(expect.objectContaining({ lat: expect.any(Number), lng: expect.any(Number) }));
+  expect(getApproachMarkerPosition(center, 'SWB').lat).toBeGreaterThan(center.lat);
+  expect(getApproachMarkerPosition(center, 'SWB').lng).toBeGreaterThan(center.lng);
+});
+
+test('searches a named place and falls back to an address when Places has no result', async () => {
+  const location = { toJSON: () => ({ lat: 37.5, lng: 127 }) };
+  const geocode = jest.fn().mockResolvedValue({ results: [{ geometry: { location } }] });
+  const googleMaps = {
+    places: { PlacesServiceStatus: { OK: 'OK' }, PlacesService: class { textSearch(request, callback) { callback([], 'ZERO_RESULTS'); } } },
+    Geocoder: class { geocode = geocode; },
+  };
+  const result = await findMapLocation(googleMaps, { getCenter: () => location }, '서울시청');
+  expect(result).toBe(location);
+  expect(geocode).toHaveBeenCalledWith({ address: '서울시청', region: 'KR' });
+});
+
+test('puts save feedback below the iPhone safe area', () => {
+  showToast('저장되었습니다.');
+  const toast = screen.getByRole('status');
+  expect(toast).toHaveClass('app-toast');
+  toast.remove();
+});
 
 test('keeps names in a two-line overflow container with the full title available', () => {
   const name = '아주 긴 프로젝트 및 교차로 이름 전체 내용';
