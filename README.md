@@ -49,7 +49,7 @@ npm run build
 
 Firebase 웹 구성값은 클라이언트 식별 정보입니다. 실제 데이터 접근 통제는 Firestore Security Rules와 Firebase App Check로 관리해야 합니다. Google Maps 키는 Firebase 키와 분리하고 Maps JavaScript API 및 허용 도메인으로 제한합니다.
 
-지역 이동 좌표는 [시·군·구 좌표 공개 자료](https://gist.github.com/hmmhmmhm/b3a950e84f865f8abbd00fa460aa4613)를 바탕으로 하며, 현재 행정구역 명칭을 반영했습니다. 이 좌표는 대략적인 지도 이동용입니다. 교차로 위치는 현장에서 지도 중심을 확인한 뒤 별도로 지정해야 합니다.
+지역 이동 좌표는 [시·군·구 좌표 공개 자료](https://gist.github.com/hmmhmmhm/b3a950e84f865f8abbd00fa460aa4613)를 바탕으로 하며, 현재 행정구역 명칭을 반영했습니다. 이 좌표는 대략적인 지도 이동용입니다. 지도 드래그·GPS·지역 이동은 저장된 교차로 위치를 바꾸지 않습니다. 위치를 바꾸려면 `위치 변경` → 지도 중심 조정 → `이 위치로 확정`을 순서대로 눌러야 합니다. 방향 아이콘은 확정된 위치를 기준으로 배치합니다.
 
 ## 모바일 앱
 

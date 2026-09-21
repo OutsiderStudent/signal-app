@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 import * as XLSX from 'xlsx';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, LockKeyhole } from 'lucide-react';
 import { REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
 // --- IMPORTANT: Google Maps API Key ---
@@ -895,17 +895,16 @@ export const PhaseSelectionModal = ({ directions = DEFAULT_DIRECTIONS, initialMo
     );
 };
 
-const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId, vibrationEnabled, soundEnabled }) => {
+export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId, vibrationEnabled, soundEnabled }) => {
     const [details, setDetails] = useState(null);
     const [map, setMap] = useState(null);
-    const [mapCenter, setMapCenter] = useState(null); // Separate state for map center to avoid re-rendering map on drag
+    const [mapCenter, setMapCenter] = useState(null); // Confirmed intersection location, not the browsing viewport.
     const [mapTypeId, setMapTypeId] = useState('roadmap');
     const [isRegionPickerOpen, setIsRegionPickerOpen] = useState(false);
     const [regionProvince, setRegionProvince] = useState('');
     const [regionDistrict, setRegionDistrict] = useState('');
-    const [isRegionPreview, setIsRegionPreview] = useState(false);
-    const regionPreviewRef = useRef(false);
-    const restoreRegionPreviewRef = useRef(false);
+    const [isLocationEditing, setIsLocationEditing] = useState(false);
+    const [isLocationSaving, setIsLocationSaving] = useState(false);
     const mapContainerRef = useRef(null);
     const [isSaving, setIsSaving] = useState(false);
     const [phases, setPhases] = useState([]);
@@ -923,7 +922,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const [surveyor, setSurveyor] = useState('');
     const [surveyedAt, setSurveyedAt] = useState(currentLocalDateTime);
     const markersRef = useRef({});
-    const mainMarkerRef = useRef(null); // Ref for the main intersection marker
+    const mainMarkerRef = useRef(null); // Fixed at the confirmed intersection location.
     const [isDirty, setIsDirty] = useState(false);
     const initialData = useRef(null);
     const [isLocationVisible, setIsLocationVisible] = useState(true);
@@ -937,9 +936,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
     useEffect(() => {
         if (!isLocationVisible) {
-            regionPreviewRef.current = false;
-            restoreRegionPreviewRef.current = false;
-            setIsRegionPreview(false);
+            setIsLocationEditing(false);
             setIsRegionPickerOpen(false);
         }
     }, [isLocationVisible]);
@@ -1033,9 +1030,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                 const remoteLocation = data.location || null;
                 const remoteMapIcons = data.mapIcons || {};
                 lastSyncedSpatialRef.current = { location: remoteLocation, mapIcons: remoteMapIcons };
-                if (remoteLocation) {
-                    setMapCenter(previous => areCoordinatesEqual(previous, remoteLocation) ? previous : remoteLocation);
-                }
+                setMapCenter(previous => areCoordinatesEqual(previous, remoteLocation) ? previous : remoteLocation);
                 setMapIcons(previous => areMapIconsEqual(previous, remoteMapIcons) ? previous : remoteMapIcons);
                 const validPhases = (data.phases && Array.isArray(data.phases) && data.phases.length > 0 ? data.phases : Array.from({ length: 4 }, () => ({ movements: [], times: [], isPermissive: false }))).map(p => ({
                     movements: normalizePhaseMovements(p),
@@ -1093,10 +1088,9 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     }, [draftKey, memo, surveyor, surveyedAt, phases, directions]);
 
     useEffect(() => {
-        if (!hydratedRef.current || !mapCenter) return undefined;
+        if (!hydratedRef.current || !mapCenter || isLocationSaving) return undefined;
         const lastSynced = lastSyncedSpatialRef.current;
         if (areCoordinatesEqual(lastSynced.location, mapCenter) && areMapIconsEqual(lastSynced.mapIcons, mapIcons)) {
-            setSpatialSaveState(navigator.onLine ? 'saved' : 'offline');
             return undefined;
         }
         const saveVersion = ++spatialSaveVersionRef.current;
@@ -1128,7 +1122,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             });
         }, 650);
         return () => window.clearTimeout(spatialSaveTimerRef.current);
-    }, [docRef, mapCenter, mapIcons]);
+    }, [docRef, mapCenter, mapIcons, isLocationSaving]);
 
     useEffect(() => {
         if (initialData.current) {
@@ -1188,33 +1182,15 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
             });
             setMap(gMap);
 
-            mainMarkerRef.current = new window.google.maps.Marker({ 
-                position: initialCenter, 
-                map: gMap, 
-                draggable: false, // Main marker is not draggable, map center is the source of truth
-                zIndex: 10 
-            });
-
-            gMap.addListener('center_changed', () => {
-                const newCenter = gMap.getCenter();
-                if (mainMarkerRef.current) {
-                    mainMarkerRef.current.setPosition(newCenter);
-                }
-            });
-            gMap.addListener('idle', () => {
-                if (regionPreviewRef.current) {
-                    if (restoreRegionPreviewRef.current) {
-                        restoreRegionPreviewRef.current = false;
-                        regionPreviewRef.current = false;
-                    }
-                    return;
-                }
-                const center = gMap.getCenter();
-                if (center) {
-                    const nextCenter = center.toJSON();
-                    setMapCenter(previous => areCoordinatesEqual(previous, nextCenter) ? previous : nextCenter);
-                }
-            });
+            if (mapCenter) {
+                mainMarkerRef.current = new window.google.maps.Marker({
+                    position: mapCenter,
+                    map: gMap,
+                    draggable: false,
+                    title: '확정된 교차로 위치',
+                    zIndex: 10,
+                });
+            }
 
         });
         
@@ -1271,8 +1247,19 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
 
 
     useEffect(() => {
-        if (map && mapCenter) {
-            map.setCenter(mapCenter);
+        if (!map) return;
+        if (mapCenter) {
+            if (mainMarkerRef.current) mainMarkerRef.current.setPosition(mapCenter);
+            else mainMarkerRef.current = new window.google.maps.Marker({
+                position: mapCenter,
+                map,
+                draggable: false,
+                title: '확정된 교차로 위치',
+                zIndex: 10,
+            });
+        } else if (mainMarkerRef.current) {
+            mainMarkerRef.current.setMap(null);
+            mainMarkerRef.current = null;
         }
     }, [map, mapCenter]);
 
@@ -1283,13 +1270,11 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 };
-                regionPreviewRef.current = false;
-                restoreRegionPreviewRef.current = false;
-                setIsRegionPreview(false);
                 if (map) {
-                    map.setCenter(newLoc);
+                    map.panTo(newLoc);
+                    map.setZoom(17);
                 }
-                setMapCenter(newLoc);
+                showToast('현재 위치로 이동했습니다. 교차로 위치는 변경되지 않았습니다.');
             }, () => showAlert('현재 위치를 가져올 수 없습니다. 브라우저의 위치 정보 접근 권한을 확인해주세요.'));
         } else {
             showAlert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.');
@@ -1299,34 +1284,53 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
     const handleRegionMove = () => {
         const position = getRegionPoint(regionProvince, regionDistrict);
         if (!map || !position) return;
-        regionPreviewRef.current = true;
-        restoreRegionPreviewRef.current = false;
-        setIsRegionPreview(true);
         setIsRegionPickerOpen(false);
         map.panTo(position);
         map.setZoom(12);
     };
 
-    const handleRegionCancel = () => {
-        if (!map || !mapCenter) return;
-        restoreRegionPreviewRef.current = true;
-        setIsRegionPreview(false);
-        map.panTo(mapCenter);
-        map.setZoom(17);
-    };
-
-    const handleRegionPositionApply = () => {
+    const handleLocationConfirm = () => {
         const position = map?.getCenter()?.toJSON();
         if (!position) return;
-        regionPreviewRef.current = false;
-        restoreRegionPreviewRef.current = false;
-        setIsRegionPreview(false);
+        if (areCoordinatesEqual(position, mapCenter)) {
+            setIsLocationEditing(false);
+            showToast('저장된 교차로 위치를 유지했습니다.');
+            return;
+        }
+        const previousSpatial = lastSyncedSpatialRef.current;
+        const saveVersion = ++spatialSaveVersionRef.current;
+        if (spatialSaveTimerRef.current) window.clearTimeout(spatialSaveTimerRef.current);
+        lastSyncedSpatialRef.current = { location: position, mapIcons };
+        setIsLocationEditing(false);
         setMapCenter(position);
+        setIsLocationSaving(navigator.onLine);
+        setSpatialSaveState(navigator.onLine ? 'saving' : 'offline');
+        const spatialUpdatedAt = new Date();
+        updateDoc(docRef, { location: position, mapIcons, spatialUpdatedAt }).then(() => {
+            if (saveVersion !== spatialSaveVersionRef.current) return;
+            lastSyncedSpatialRef.current = { location: position, mapIcons };
+            setMapCenter(previous => areCoordinatesEqual(previous, position) ? previous : position);
+            if (initialData.current) {
+                initialData.current.location = position;
+                initialData.current.mapIcons = mapIcons;
+            }
+            setSpatialSaveState('saved');
+            setIsLocationSaving(false);
+        }).catch(error => {
+            if (saveVersion !== spatialSaveVersionRef.current) return;
+            console.error('Failed to save confirmed location:', error);
+            lastSyncedSpatialRef.current = previousSpatial;
+            setMapCenter(previousSpatial.location);
+            setSpatialSaveState('error');
+            setIsLocationSaving(false);
+            showToast('교차로 위치를 저장하지 못했습니다. 다시 지정해 주세요.', 'error');
+        });
+        showToast(navigator.onLine ? '교차로 위치를 저장하는 중입니다.' : '교차로 위치를 기기에 저장했습니다. 연결되면 동기화됩니다.');
     };
     
     const addMapIcon = (dir) => {
         if (!map || mapIcons[dir]) return;
-        const position = getApproachMarkerPosition(map.getCenter().toJSON(), dir);
+        const position = getApproachMarkerPosition(mapCenter || map.getCenter().toJSON(), dir);
         if (position) setMapIcons(prev => ({ ...prev, [dir]: position }));
     };
 
@@ -1523,6 +1527,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                     </div>
                                 }
                             </div>
+                            {isLocationEditing && <div className="pointer-events-none absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/90 p-2 text-white shadow-[0_0_0_5px_rgba(255,255,255,.9)]" aria-hidden="true"><Crosshair size={24} /></div>}
                             <button type="button" onClick={() => setIsRegionPickerOpen(open => !open)} aria-expanded={isRegionPickerOpen} aria-controls="region-picker" className="absolute left-3 top-3 z-10 flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-lg dark:bg-gray-800 dark:text-white">
                                 <MapPin size={17} className="text-blue-600" /> 지역으로 이동 <ChevronDown size={16} />
                             </button>
@@ -1548,11 +1553,19 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                                 </button>
                             </div>
                         </div>
-                        {isRegionPreview && <div className="region-preview mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 dark:bg-blue-950/70 dark:text-blue-100" role="status">
-                            <span className="w-full">지역으로 이동했습니다. 교차로 위치는 아직 바뀌지 않았습니다.</span>
-                            <button type="button" onClick={handleRegionPositionApply} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 text-white">현재 중심을 교차로 위치로 지정</button>
-                            <button type="button" onClick={handleRegionCancel} className="min-h-11 rounded-xl bg-white px-3 text-blue-800 dark:bg-slate-800 dark:text-blue-100">취소</button>
-                        </div>}
+                        <div className="region-preview mt-3 rounded-2xl bg-blue-50 px-3 py-3 text-xs text-blue-900 dark:bg-blue-950/70 dark:text-blue-100" role="status">
+                            <div className="flex items-center gap-2 font-bold"><LockKeyhole size={16} /> {mapCenter ? '교차로 위치 잠금' : '교차로 위치 미지정'}</div>
+                            <p className="mt-1">지도 이동·지역 이동·GPS는 저장된 위치를 바꾸지 않습니다. {isLocationEditing ? '파란 조준점을 교차로에 맞춘 뒤 위치를 확정하세요.' : mapCenter ? '빨간 핀이 확정된 위치입니다.' : '위치 지정 버튼을 눌러 교차로를 표시하세요.'}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {isLocationEditing ? <>
+                                    <button type="button" onClick={handleLocationConfirm} disabled={!map || isLocationSaving} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 font-bold text-white disabled:opacity-50">이 위치로 확정</button>
+                                    <button type="button" onClick={() => setIsLocationEditing(false)} className="min-h-11 rounded-xl bg-white px-3 font-semibold text-blue-800 dark:bg-slate-800 dark:text-blue-100">취소</button>
+                                </> : <>
+                                    <button type="button" onClick={() => setIsLocationEditing(true)} disabled={!map || isLocationSaving} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 font-bold text-white disabled:opacity-50">{mapCenter ? '위치 변경' : '위치 지정'}</button>
+                                    {mapCenter && <button type="button" onClick={() => { map?.panTo(mapCenter); map?.setZoom(17); }} className="min-h-11 rounded-xl bg-white px-3 font-semibold text-blue-800 dark:bg-slate-800 dark:text-blue-100">저장 위치로 이동</button>}
+                                </>}
+                            </div>
+                        </div>
                          <div className="mt-4 p-4 content-surface">
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">방향 아이콘 (클릭하여 지도에 추가/삭제)</h3>
@@ -1571,7 +1584,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                             </div>
                             <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : spatialSaveState === 'offline' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
                                 {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' || spatialSaveState === 'offline' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
-                                {spatialSaveState === 'saving' ? '위치·방향을 저장하는 중' : spatialSaveState === 'error' ? '위치 저장 실패 · 다시 움직여 재시도' : spatialSaveState === 'offline' ? '기기에 저장됨 · 연결 시 동기화' : '위치·방향 실시간 저장 완료'}
+                                {spatialSaveState === 'saving' ? '확정 위치·방향 저장 중' : spatialSaveState === 'error' ? '위치·방향 저장 실패 · 다시 시도 필요' : spatialSaveState === 'offline' ? '확정 위치·방향 기기에 저장됨 · 연결 시 동기화' : mapCenter ? '확정 위치·방향 저장 완료' : '교차로 위치 미지정 · 위치 지정 후 저장'}
                             </div>
                         </div>
                     </>
@@ -1717,7 +1730,7 @@ const IntersectionDetail = ({ intersection, db, userId, appId, onBack, projectId
                     <span className={`font-bold ${getIntersectionStatus({ ...details, location: mapCenter, phases }) === '조사완료' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300'}`}>{getIntersectionStatus({ ...details, location: mapCenter, phases })}</span>
                     <span>마지막 저장 {formatSavedAt(lastSavedAt)}</span>
                 </div>
-                <button onClick={handleSaveAll} disabled={isSaving} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
+                <button onClick={handleSaveAll} disabled={isSaving || isLocationSaving} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
                     <Save size={20} />
                     {isSaving ? '저장 중...' : isDirty ? '모든 변경사항 저장 · 변경됨' : '모든 변경사항 저장'}
                 </button>
