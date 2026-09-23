@@ -138,6 +138,19 @@ export const finishButtonFeedback = (event, animateRelease = true) => {
     buttonFeedbackTimers.set(button, timer);
 };
 
+export const supportsWebVibration = () => typeof navigator !== 'undefined'
+    && typeof navigator.vibrate === 'function';
+
+export const triggerWebVibration = (pattern = [35, 25, 35]) => {
+    if (!supportsWebVibration()) return false;
+    try {
+        return navigator.vibrate(pattern) !== false;
+    } catch (error) {
+        console.warn('Device vibration is unavailable:', error);
+        return false;
+    }
+};
+
 // --- Firebase Configuration ---
 const localFirebaseConfig = {
     apiKey: "AIzaSyCwJJH0a6EHcCotHhH597oeGK6eYRnc1T8",
@@ -690,7 +703,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     )
 };
 
-export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, soundEnabled, onToggleVibration, onToggleSound, canInstall, isInstalled, isIos, onInstall, onBackup, onReset }) => {
+export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, vibrationSupported = true, soundEnabled, onToggleVibration, onToggleSound, canInstall, isInstalled, isIos, onInstall, onBackup, onReset }) => {
     if (!isOpen) return null;
 
     return (
@@ -710,10 +723,11 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                             </div>
                         </div>
                     </button>
-                    <button onClick={onToggleVibration} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
+                    <button onClick={onToggleVibration} disabled={!vibrationSupported} aria-describedby={!vibrationSupported ? 'vibration-support-note' : undefined} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-65">
                         <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Smartphone size={20}/> 기록 진동</span>
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${vibrationEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{vibrationEnabled ? '켜짐' : '꺼짐'}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${vibrationSupported && vibrationEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{vibrationSupported ? (vibrationEnabled ? '켜짐' : '꺼짐') : '미지원'}</span>
                     </button>
+                    {!vibrationSupported && <p id="vibration-support-note" className="-mt-2 px-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{isIos ? 'iPhone·iPad 웹앱은 시스템 진동을 지원하지 않습니다. 효과음과 버튼 애니메이션이 대신 동작합니다.' : '이 브라우저는 웹 진동을 지원하지 않습니다. 효과음과 버튼 애니메이션이 대신 동작합니다.'}</p>}
                     <button onClick={onToggleSound} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
                         <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Volume2 size={20}/> 기록 효과음</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${soundEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{soundEnabled ? '켜짐' : '꺼짐'}</span>
@@ -975,7 +989,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
     const draftKey = useMemo(() => `signal-app-draft:${userId}:${projectId}:${intersection.id}`, [userId, projectId, intersection.id]);
 
     const provideTimerFeedback = useCallback(() => {
-        if (vibrationEnabled && navigator.vibrate) navigator.vibrate(45);
+        if (vibrationEnabled) triggerWebVibration();
         if (!soundEnabled) return;
         try {
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -2189,6 +2203,7 @@ export default function App() {
     const edgeSwipeStartRef = useRef(null);
     const isIos = /iPad|iPhone|iPod/i.test(navigator.userAgent)
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const vibrationSupported = supportsWebVibration();
     
     const [view, setView] = useState('projects'); // 'projects', 'intersections', 'detail'
     const [viewMotion, setViewMotion] = useState('forward');
@@ -2196,7 +2211,7 @@ export default function App() {
     useEffect(() => {
         const savedDarkMode = localStorage.getItem('darkMode') === 'true';
         setIsDarkMode(savedDarkMode);
-        setVibrationEnabled(localStorage.getItem('timerVibration') !== 'false');
+        setVibrationEnabled(vibrationSupported && localStorage.getItem('timerVibration') !== 'false');
         setSoundEnabled(localStorage.getItem('timerSound') !== 'false');
     }, []);
 
@@ -2518,10 +2533,19 @@ export default function App() {
                 isDarkMode={isDarkMode}
                 onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
                 vibrationEnabled={vibrationEnabled}
+                vibrationSupported={vibrationSupported}
                 soundEnabled={soundEnabled}
                 onToggleVibration={() => setVibrationEnabled(value => {
+                    if (!vibrationSupported) {
+                        showToast('이 기기에서는 웹 진동을 사용할 수 없습니다.', 'error');
+                        return false;
+                    }
                     const next = !value;
                     localStorage.setItem('timerVibration', String(next));
+                    if (next) {
+                        const worked = triggerWebVibration();
+                        showToast(worked ? '시험 진동을 실행했습니다.' : '진동을 실행할 수 없습니다.', worked ? 'success' : 'error');
+                    }
                     return next;
                 })}
                 onToggleSound={() => setSoundEnabled(value => {

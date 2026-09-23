@@ -26,6 +26,8 @@ import {
   showToast,
   startButtonFeedback,
   finishButtonFeedback,
+  supportsWebVibration,
+  triggerWebVibration,
 } from './App';
 import { REGION_POINTS, REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
@@ -72,6 +74,15 @@ test('gives every enabled button distinct press and release feedback', () => {
   expect(button).not.toHaveClass('button-pressed');
   expect(button).toHaveClass('button-release');
   button.remove();
+});
+
+test('reports web vibration support and triggers a tactile pattern when available', () => {
+  const originalVibrate = navigator.vibrate;
+  Object.defineProperty(navigator, 'vibrate', { configurable: true, value: jest.fn(() => true) });
+  expect(supportsWebVibration()).toBe(true);
+  expect(triggerWebVibration()).toBe(true);
+  expect(navigator.vibrate).toHaveBeenCalledWith([35, 25, 35]);
+  Object.defineProperty(navigator, 'vibrate', { configurable: true, value: originalVibrate });
 });
 
 test('keeps names in a two-line overflow container with the full title available', () => {
@@ -195,6 +206,13 @@ test('always shows iPhone PWA installation guidance when a native prompt is unav
   expect(screen.getByRole('region', { name: '홈 화면 앱 설치 안내' })).toBeInTheDocument();
   expect(screen.getByText(/Safari의/)).toBeInTheDocument();
   expect(screen.getByText('홈 화면에 추가')).toBeInTheDocument();
+});
+
+test('explains that iPhone PWAs cannot use system vibration', () => {
+  render(<SettingsModal {...settingsProps} vibrationSupported={false} canInstall={false} isInstalled isIos />);
+  expect(screen.getByRole('button', { name: /기록 진동/ })).toBeDisabled();
+  expect(screen.getByText('미지원')).toBeInTheDocument();
+  expect(screen.getByText(/iPhone·iPad 웹앱은 시스템 진동을 지원하지 않습니다/)).toBeInTheDocument();
 });
 
 test('offers a direct PWA install action when the browser supports it', () => {
