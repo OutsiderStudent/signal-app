@@ -66,6 +66,7 @@
 
   .app-toast {
     top: calc(env(safe-area-inset-top, 0px) + 1rem);
+    animation: app-toast-in 360ms cubic-bezier(.2, .9, .2, 1.15) both;
   }
 
   .dark .app-shell {
@@ -85,17 +86,34 @@
   .glass-toolbar { border-radius: 9999px; }
   .glass-backdrop { background: rgba(15, 23, 42, 0.38); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 
-  .app-view { animation: app-view-forward 230ms cubic-bezier(.22, 1, .36, 1) both; }
+  .app-view { animation: app-view-forward 300ms cubic-bezier(.2, .9, .2, 1) both; }
   .app-view--back { animation-name: app-view-back; }
-  .glass-backdrop { animation: app-backdrop-in 180ms ease-out both; }
-  .glass-modal { animation: app-modal-in 220ms cubic-bezier(.22, 1, .36, 1) both; }
-  .region-picker, .region-preview { animation: app-modal-in 190ms cubic-bezier(.22, 1, .36, 1) both; }
+  .glass-backdrop { animation: app-backdrop-in 210ms ease-out both; }
+  .glass-modal { animation: app-modal-in 330ms cubic-bezier(.2, .9, .2, 1.08) both; }
+  .region-picker, .region-preview { animation: app-modal-in 280ms cubic-bezier(.2, .9, .2, 1.08) both; }
 
   .app-shell button:not(:disabled) {
-    transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+    scale: 1;
+    translate: 0 0;
+    transition: scale 320ms cubic-bezier(.34, 1.56, .64, 1), translate 320ms cubic-bezier(.34, 1.56, .64, 1), filter 180ms ease, transform 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 240ms ease, opacity 180ms ease;
     -webkit-tap-highlight-color: transparent;
   }
-  .app-shell button:not(:disabled):active { transform: scale(.96); }
+  .app-shell button:not(:disabled):active,
+  .app-shell button.button-pressed:not(:disabled) {
+    scale: .94;
+    translate: 0 1px;
+    filter: brightness(.94) saturate(1.08);
+    box-shadow: 0 2px 7px rgba(37, 74, 117, 0.14), inset 0 2px 5px rgba(15, 23, 42, 0.12);
+    transition-duration: 70ms;
+    transition-timing-function: cubic-bezier(.32, 0, .67, 0);
+  }
+  .app-shell button:not(:disabled) > svg {
+    transition: scale 280ms cubic-bezier(.34, 1.56, .64, 1), rotate 280ms cubic-bezier(.34, 1.56, .64, 1), opacity 160ms ease;
+  }
+  .app-shell button.button-pressed:not(:disabled) > svg,
+  .app-shell button:not(:disabled):active > svg { scale: .86; }
+  .app-shell button.button-release:not(:disabled) { animation: app-button-release 340ms cubic-bezier(.34, 1.56, .64, 1); }
+  .app-shell button.button-release:not(:disabled) > svg { animation: app-symbol-release 320ms cubic-bezier(.34, 1.56, .64, 1); }
   .app-shell button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 
   .content-surface {
@@ -137,11 +155,11 @@
   .soft-button {
     border-radius: 1.1rem;
     box-shadow: 0 8px 22px rgba(37, 74, 117, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-    transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    transition: scale 320ms cubic-bezier(.34, 1.56, .64, 1), translate 320ms cubic-bezier(.34, 1.56, .64, 1), transform 180ms ease, box-shadow 240ms ease, background-color 180ms ease, filter 180ms ease;
   }
 
   .soft-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(37, 74, 117, 0.17), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
-  .soft-button:active { transform: scale(0.985); }
+  .soft-button:active { transform: translateY(1px); }
 
   .survey-datetime-input {
     box-sizing: border-box;
@@ -187,12 +205,12 @@
 }
 
 @keyframes app-view-forward {
-  from { opacity: .72; transform: translateX(16px); }
+  from { opacity: .58; transform: translateX(22px) scale(.992); }
   to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes app-view-back {
-  from { opacity: .72; transform: translateX(-16px); }
+  from { opacity: .58; transform: translateX(-22px) scale(.992); }
   to { opacity: 1; transform: translateX(0); }
 }
 
@@ -202,7 +220,25 @@
 }
 
 @keyframes app-modal-in {
-  from { opacity: .7; transform: translateY(8px) scale(.98); }
+  from { opacity: .55; transform: translateY(14px) scale(.965); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes app-button-release {
+  0% { scale: .94; translate: 0 1px; }
+  58% { scale: 1.025; translate: 0 -1px; }
+  100% { scale: 1; translate: 0 0; }
+}
+
+@keyframes app-symbol-release {
+  0% { scale: .86; }
+  62% { scale: 1.08; }
+  100% { scale: 1; }
+}
+
+@keyframes app-toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(.96); }
+  70% { opacity: 1; transform: translateY(1px) scale(1.01); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 

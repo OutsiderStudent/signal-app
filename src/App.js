@@ -109,6 +109,35 @@ export const isEdgeBackSwipe = (start, end) => Boolean(
     && Math.abs(end.y - start.y) <= 60
 );
 
+const feedbackButtonFromEvent = event => event.target instanceof Element
+    ? event.target.closest('button')
+    : null;
+const buttonFeedbackTimers = new WeakMap();
+
+export const startButtonFeedback = event => {
+    const button = feedbackButtonFromEvent(event);
+    if (!button || button.disabled) return;
+    window.clearTimeout(buttonFeedbackTimers.get(button));
+    button.classList.remove('button-release');
+    button.classList.add('button-pressed');
+};
+
+export const finishButtonFeedback = (event, animateRelease = true) => {
+    const button = feedbackButtonFromEvent(event);
+    if (!button) return;
+    button.classList.remove('button-pressed');
+    if (!animateRelease || button.disabled) return;
+    button.classList.remove('button-release');
+    // Restart the short release animation even on rapid repeated taps.
+    void button.offsetWidth;
+    button.classList.add('button-release');
+    const timer = window.setTimeout(() => {
+        button.classList.remove('button-release');
+        buttonFeedbackTimers.delete(button);
+    }, 360);
+    buttonFeedbackTimers.set(button, timer);
+};
+
 // --- Firebase Configuration ---
 const localFirebaseConfig = {
     apiKey: "AIzaSyCwJJH0a6EHcCotHhH597oeGK6eYRnc1T8",
@@ -2473,6 +2502,9 @@ export default function App() {
             className="app-shell font-sans text-gray-800 dark:text-gray-200"
             onTouchStartCapture={handleAppTouchStart}
             onTouchEndCapture={handleAppTouchEnd}
+            onPointerDownCapture={startButtonFeedback}
+            onPointerUpCapture={event => finishButtonFeedback(event)}
+            onPointerCancelCapture={event => finishButtonFeedback(event, false)}
         >
             <AddProjectModal
                 isOpen={isAddProjectModalOpen}

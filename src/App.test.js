@@ -24,6 +24,8 @@ import {
   reattachMapMarker,
   getApproachMarkerPosition,
   showToast,
+  startButtonFeedback,
+  finishButtonFeedback,
 } from './App';
 import { REGION_POINTS, REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
@@ -55,6 +57,21 @@ test('puts save feedback below the iPhone safe area', () => {
   const toast = screen.getByRole('status');
   expect(toast).toHaveClass('app-toast');
   toast.remove();
+});
+
+test('gives every enabled button distinct press and release feedback', () => {
+  const button = document.createElement('button');
+  const icon = document.createElement('span');
+  button.appendChild(icon);
+  document.body.appendChild(button);
+
+  startButtonFeedback({ target: icon });
+  expect(button).toHaveClass('button-pressed');
+
+  finishButtonFeedback({ target: icon });
+  expect(button).not.toHaveClass('button-pressed');
+  expect(button).toHaveClass('button-release');
+  button.remove();
 });
 
 test('keeps names in a two-line overflow container with the full title available', () => {
