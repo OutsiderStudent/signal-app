@@ -4,9 +4,11 @@ import { initializeApp } from 'firebase/app';
 import * as XLSX from 'xlsx';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, LockKeyhole } from 'lucide-react';
+import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, LockKeyhole, ExternalLink } from 'lucide-react';
 import { REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 import { applyAppUpdate } from './appUpdate';
+
+const APP_WEBSITE_URL = 'https://signal-app-nyh.netlify.app/';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -875,6 +877,9 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                         )}
                         {!isInstalled && <p className="mt-2 text-xs leading-5 text-blue-700/75 dark:text-blue-200/70">설치가 끝나면 홈 화면의 ‘신호현시조사’ 아이콘으로 실행하세요.</p>}
                     </section>
+                    <a href={APP_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className="min-h-12 w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
+                        <ExternalLink size={20} aria-hidden="true" /> 웹사이트 열기
+                    </a>
                     <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>

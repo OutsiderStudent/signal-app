@@ -203,6 +203,13 @@ const settingsProps = {
   onReset: () => {},
 };
 
+test('links to the published website from installed app settings', () => {
+  render(<SettingsModal {...settingsProps} isInstalled isIos />);
+  const link = screen.getByRole('link', { name: '웹사이트 열기' });
+  expect(link).toHaveAttribute('href', 'https://signal-app-nyh.netlify.app/');
+  expect(link).toHaveAttribute('target', '_blank');
+});
+
 test('always shows iPhone PWA installation guidance when a native prompt is unavailable', () => {
   render(<SettingsModal {...settingsProps} canInstall={false} isInstalled={false} isIos />);
   expect(screen.getByRole('region', { name: '홈 화면 앱 설치 안내' })).toBeInTheDocument();
