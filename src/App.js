@@ -6,6 +6,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, setLogLevel, getDocs, writeBatch, orderBy } from 'firebase/firestore';
 import { Plus, Trash2, Save, X, ArrowLeft, MapPin, Edit, Timer, Play, Square, AlertTriangle, History, Crosshair, Satellite, StickyNote, Folder, Settings, Moon, Sun, Download, RefreshCw, ArrowUp, ArrowDown, ChevronDown, ChevronUp, CheckCircle, SlidersHorizontal, Volume2, Smartphone, MoreHorizontal, LockKeyhole } from 'lucide-react';
 import { REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
+import { applyAppUpdate } from './appUpdate';
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -2334,6 +2335,8 @@ export default function App() {
         window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
     ));
     const [updateRegistration, setUpdateRegistration] = useState(null);
+    const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
+    const updateCleanupRef = useRef(null);
     const edgeSwipeStartRef = useRef(null);
     const isIos = /iPad|iPhone|iPod/i.test(navigator.userAgent)
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -2396,11 +2399,12 @@ export default function App() {
         setInstallPrompt(null);
     };
 
+    useEffect(() => () => updateCleanupRef.current?.(), []);
+
     const handleApplyUpdate = () => {
-        const waiting = updateRegistration?.waiting;
-        if (!waiting) return;
-        navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
-        waiting.postMessage('SKIP_WAITING');
+        if (isApplyingUpdate || !isOnline) return;
+        setIsApplyingUpdate(true);
+        updateCleanupRef.current = applyAppUpdate(updateRegistration, navigator.serviceWorker, () => window.location.reload());
     };
 
     useEffect(() => {
@@ -2728,7 +2732,10 @@ export default function App() {
                 </button>
             </div>
             {!isOnline && <div className="app-floating-status fixed left-1/2 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인</div>}
-            {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전이 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
+            {updateRegistration && view !== 'detail' && <div className="fixed left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+                <span role="status">{isApplyingUpdate ? '업데이트 중…' : isOnline ? '새 버전이 있습니다.' : '연결 후 업데이트할 수 있습니다.'}</span>
+                <button type="button" onClick={handleApplyUpdate} disabled={isApplyingUpdate || !isOnline} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900 disabled:opacity-60">업데이트</button>
+            </div>}
 
             <main key={view} className={`app-view app-view--${viewMotion} pb-20`}>
                 {view === 'projects' && (

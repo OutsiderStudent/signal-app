@@ -13,15 +13,20 @@ root.render(
 
 if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${process.env.PUBLIC_URL}/service-worker.js`).then(registration => {
+    navigator.serviceWorker.register(`${process.env.PUBLIC_URL}/service-worker.js`, { updateViaCache: 'none' }).then(registration => {
       if (registration.waiting) window.dispatchEvent(new CustomEvent('signal-app-update', { detail: registration }));
       registration.addEventListener('updatefound', () => {
         const worker = registration.installing;
         worker?.addEventListener('statechange', () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          if (worker.state === 'installed' && registration.waiting && navigator.serviceWorker.controller) {
             window.dispatchEvent(new CustomEvent('signal-app-update', { detail: registration }));
           }
         });
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          registration.update().catch(error => console.warn('App update check failed:', error));
+        }
       });
     }).catch(error => console.warn('Service worker registration failed:', error));
   });
