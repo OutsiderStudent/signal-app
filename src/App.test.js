@@ -205,7 +205,7 @@ const settingsProps = {
 
 test('opens Safari directly from the installed iOS web app', () => {
   render(<SettingsModal {...settingsProps} isInstalled isIos />);
-  const link = screen.getByRole('link', { name: 'Safari에서 열기' });
+  const link = screen.getByRole('link', { name: '웹사이트 열기' });
   expect(link).toHaveAttribute('href', 'x-safari-https://signal-app-nyh.netlify.app/');
   expect(link).not.toHaveAttribute('target');
   expect(screen.getByRole('button', { name: '웹 주소 복사' })).toBeInTheDocument();

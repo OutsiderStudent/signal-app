@@ -880,7 +880,7 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                         {!isInstalled && <p className="mt-2 text-xs leading-5 text-blue-700/75 dark:text-blue-200/70">설치가 끝나면 홈 화면의 ‘신호현시조사’ 아이콘으로 실행하세요.</p>}
                     </section>
                     <a href={openInSafari ? APP_SAFARI_URL : APP_WEBSITE_URL} target={openInSafari ? undefined : '_blank'} rel={openInSafari ? undefined : 'noopener noreferrer'} className="min-h-12 w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
-                        <ExternalLink size={20} aria-hidden="true" /> {openInSafari ? 'Safari에서 열기' : '웹사이트 열기'}
+                        <ExternalLink size={20} aria-hidden="true" /> 웹사이트 열기
                     </a>
                     {openInSafari && <button type="button" onClick={async () => {
                         try {
