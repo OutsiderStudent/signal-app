@@ -9,6 +9,7 @@ import { REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions'
 import { applyAppUpdate } from './appUpdate';
 
 const APP_WEBSITE_URL = 'https://signal-app-nyh.netlify.app/';
+const APP_SAFARI_URL = `x-safari-${APP_WEBSITE_URL}`;
 
 // --- IMPORTANT: Google Maps API Key ---
 // Using a placeholder key. Replace with your actual Google Maps API key.
@@ -821,6 +822,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
 
 export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, vibrationEnabled, vibrationSupported = true, soundEnabled, onToggleVibration, onToggleSound, onTestSound, onCopyDiagnostics, canInstall, isInstalled, isIos, onInstall, onBackup, onReset }) => {
     if (!isOpen) return null;
+    const openInSafari = isIos && isInstalled;
 
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
@@ -877,9 +879,17 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                         )}
                         {!isInstalled && <p className="mt-2 text-xs leading-5 text-blue-700/75 dark:text-blue-200/70">설치가 끝나면 홈 화면의 ‘신호현시조사’ 아이콘으로 실행하세요.</p>}
                     </section>
-                    <a href={APP_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className="min-h-12 w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
-                        <ExternalLink size={20} aria-hidden="true" /> 웹사이트 열기
+                    <a href={openInSafari ? APP_SAFARI_URL : APP_WEBSITE_URL} target={openInSafari ? undefined : '_blank'} rel={openInSafari ? undefined : 'noopener noreferrer'} className="min-h-12 w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
+                        <ExternalLink size={20} aria-hidden="true" /> {openInSafari ? 'Safari에서 열기' : '웹사이트 열기'}
                     </a>
+                    {openInSafari && <button type="button" onClick={async () => {
+                        try {
+                            await navigator.clipboard.writeText(APP_WEBSITE_URL);
+                            showToast('웹 주소를 복사했습니다.');
+                        } catch {
+                            showToast(APP_WEBSITE_URL);
+                        }
+                    }} className="min-h-11 w-full rounded-2xl px-3 text-left text-sm font-semibold text-blue-700 hover:bg-white/60 dark:text-blue-200 dark:hover:bg-white/10">웹 주소 복사</button>}
                     <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>
