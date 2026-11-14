@@ -882,14 +882,6 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                     <a href={openInSafari ? APP_SAFARI_URL : APP_WEBSITE_URL} target={openInSafari ? undefined : '_blank'} rel={openInSafari ? undefined : 'noopener noreferrer'} className="min-h-12 w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <ExternalLink size={20} aria-hidden="true" /> 웹사이트 열기
                     </a>
-                    {openInSafari && <button type="button" onClick={async () => {
-                        try {
-                            await navigator.clipboard.writeText(APP_WEBSITE_URL);
-                            showToast('웹 주소를 복사했습니다.');
-                        } catch {
-                            showToast(APP_WEBSITE_URL);
-                        }
-                    }} className="min-h-11 w-full rounded-2xl px-3 text-left text-sm font-semibold text-blue-700 hover:bg-white/60 dark:text-blue-200 dark:hover:bg-white/10">웹 주소 복사</button>}
                     <button onClick={onBackup} className="w-full flex items-center gap-3 p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10 font-semibold dark:text-gray-200">
                         <Download size={20}/> 데이터 내보내기
                     </button>
