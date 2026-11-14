@@ -12,6 +12,7 @@ import {
   ProjectIntersectionMap,
   SettingsModal,
   buildExportCsv,
+  buildGeoJson,
   buildWorkbookData,
   areCoordinatesEqual,
   areMapIconsEqual,
@@ -28,6 +29,7 @@ import {
   finishButtonFeedback,
   supportsWebVibration,
   triggerWebVibration,
+  validateBackup,
 } from './App';
 import { REGION_POINTS, REGION_PROVINCES, getRegionDistricts, getRegionPoint } from './regions';
 
@@ -300,11 +302,13 @@ test('preserves valid duplicate movements used by special intersections', () => 
   ]);
 });
 
-test('marks an intersection complete only when identity, location and every phase time are present', () => {
+test('marks an intersection complete only when identity, location, movement and every phase time are present', () => {
   const base = { number: 1, name: '시청', location: { lat: 37.5, lng: 127 } };
-  expect(getIntersectionStatus({ ...base, phases: [{ movements: [], times: [3] }] })).toBe('조사완료');
-  expect(getIntersectionStatus({ ...base, phases: [{ movements: [], times: [] }] })).toBe('조사필요');
-  expect(getIntersectionStatus({ ...base, location: null, phases: [{ movements: [], times: [3] }] })).toBe('조사필요');
+  const movement = [{ direction: 'SB', type: '직진' }];
+  expect(getIntersectionStatus({ ...base, phases: [{ movements: movement, times: [3] }] })).toBe('조사완료');
+  expect(getIntersectionStatus({ ...base, phases: [{ movements: [], times: [3] }] })).toBe('조사필요');
+  expect(getIntersectionStatus({ ...base, phases: [{ movements: movement, times: [] }] })).toBe('조사필요');
+  expect(getIntersectionStatus({ ...base, location: null, phases: [{ movements: movement, times: [3] }] })).toBe('조사필요');
 });
 
 test('formats last saved time down to seconds', () => {
@@ -348,9 +352,31 @@ test('normalizes XLSX export into separate phase, observation and movement rows'
     { p1: true },
   );
   expect(tables.교차로).toHaveLength(1);
+  expect(tables.요약).toEqual([expect.objectContaining({ 전체교차로: 1, 조사완료: 1, 완료율: '100%' })]);
+  expect(tables.교차로[0]).toEqual(expect.objectContaining({ 현시수: 1, 신호주기초: 11 }));
   expect(tables.현시).toHaveLength(1);
   expect(tables.시간관측).toHaveLength(2);
   expect(tables.이동류).toEqual([expect.objectContaining({ 방향: 'SB', 이동류: '직진' })]);
+});
+
+test('exports located intersections as GIS-ready GeoJSON', () => {
+  const geoJson = buildGeoJson(
+    [{ id: 'p1', name: '현장조사' }],
+    { p1: [{ id: 'i1', number: 1, name: '시청', location: { lat: 37.5, lng: 127 }, phases: [{ movements: [{ direction: 'SB', type: '직진' }], times: [12] }] }] },
+    { p1: true },
+  );
+  expect(geoJson.type).toBe('FeatureCollection');
+  expect(geoJson.features[0]).toEqual(expect.objectContaining({
+    geometry: { type: 'Point', coordinates: [127, 37.5] },
+    properties: expect.objectContaining({ intersectionName: '시청', cycleSeconds: 12 }),
+  }));
+});
+
+test('validates backup contents and reports the import scope before restore', () => {
+  expect(validateBackup({ schemaVersion: 1, projects: [{ name: '복원', intersections: [{ name: '교차로', location: { lat: 37.5, lng: 127 } }] }] }))
+    .toEqual({ projectCount: 1, intersectionCount: 1 });
+  expect(() => validateBackup({ schemaVersion: 1, projects: [{ name: '', intersections: [] }] })).toThrow(/프로젝트 이름/);
+  expect(() => validateBackup({ schemaVersion: 1, projects: [{ name: '복원', intersections: [{ name: '교차로', location: { lat: '잘못됨', lng: 127 } }] }] })).toThrow(/위치 좌표/);
 });
 
 test('keeps intersection edit actions hidden until a real left swipe', () => {

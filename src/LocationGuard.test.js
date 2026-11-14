@@ -34,8 +34,8 @@ test('browsing the map never saves a location until it is explicitly confirmed',
   }
   window.google = { maps: { Map: FakeMap, Marker: FakeMarker, SymbolPath: { CIRCLE: 'circle' } } };
   doc.mockReturnValue({ path: 'test-intersection' });
-  onSnapshot.mockImplementation((reference, callback) => {
-    callback({ exists: () => true, data: () => ({ location: originalLocation, mapIcons: {}, phases: [{ movements: [], times: [] }], directions: ['SB', 'NB', 'EB', 'WB'] }) });
+  onSnapshot.mockImplementation((reference, options, callback) => {
+    callback({ exists: () => true, metadata: { hasPendingWrites: false }, data: () => ({ location: originalLocation, mapIcons: {}, phases: [{ movements: [], times: [] }], directions: ['SB', 'NB', 'EB', 'WB'] }) });
     return () => {};
   });
   updateDoc.mockResolvedValue(undefined);
