@@ -52,7 +52,7 @@ test('browsing the map never saves a location until it is explicitly confirmed',
   expect(updateDoc).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole('button', { name: '위치 변경' }));
-  fireEvent.click(screen.getByRole('button', { name: '이 위치로 확정' }));
+  fireEvent.click(screen.getByRole('button', { name: '위치 저장' }));
   await waitFor(() => expect(updateDoc).toHaveBeenCalledWith({ path: 'test-intersection' }, expect.objectContaining({ location: nextLocation })));
   unmount();
   window.google = originalGoogle;

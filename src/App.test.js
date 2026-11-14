@@ -214,13 +214,13 @@ test('explains that iPhone PWAs cannot use system vibration', () => {
   render(<SettingsModal {...settingsProps} vibrationSupported={false} canInstall={false} isInstalled isIos />);
   expect(screen.getByRole('button', { name: /기록 진동/ })).toBeDisabled();
   expect(screen.getByText('미지원')).toBeInTheDocument();
-  expect(screen.getByText(/iPhone·iPad 웹앱은 시스템 진동을 지원하지 않습니다/)).toBeInTheDocument();
+  expect(screen.getByText(/iPhone과 iPad에서는 진동을 사용할 수 없습니다/)).toBeInTheDocument();
 });
 
 test('offers a direct PWA install action when the browser supports it', () => {
   const onInstall = jest.fn();
   render(<SettingsModal {...settingsProps} canInstall isInstalled={false} isIos={false} onInstall={onInstall} />);
-  fireEvent.click(screen.getByRole('button', { name: '지금 설치하기' }));
+  fireEvent.click(screen.getByRole('button', { name: '설치' }));
   expect(onInstall).toHaveBeenCalledTimes(1);
 });
 
@@ -236,7 +236,7 @@ test('combines multiple directional movements into one phase', () => {
 
   fireEvent.click(screen.getByRole('button', { name: 'SB 직진 선택' }));
   fireEvent.click(screen.getByRole('button', { name: 'SB 좌회전 선택' }));
-  fireEvent.click(screen.getByRole('button', { name: '현시 적용' }));
+  fireEvent.click(screen.getByRole('button', { name: '적용' }));
 
   expect(onSave).toHaveBeenCalledWith([
     { direction: 'SB', type: '직진' },
@@ -274,7 +274,7 @@ test('toggles cardinal and diagonal approaches on a compass and reports the exac
   fireEvent.click(screen.getByRole('button', { name: 'SWB 방향 켜기' }));
   fireEvent.click(screen.getByRole('button', { name: 'SEB 방향 켜기' }));
   fireEvent.click(screen.getByRole('button', { name: 'WB 방향 끄기' }));
-  fireEvent.click(screen.getByRole('button', { name: '방향 적용' }));
+  fireEvent.click(screen.getByRole('button', { name: '적용' }));
   expect(onSave).toHaveBeenCalledWith(['SB', 'SWB', 'NB', 'EB', 'SEB']);
 });
 
@@ -283,7 +283,7 @@ test('allows a four-leg intersection to become three-leg but prevents fewer than
   render(<DirectionSettingsModal directions={['SB', 'NB', 'EB', 'WB']} onSave={onSave} onClose={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'WB 방향 끄기' }));
   expect(screen.getByRole('button', { name: 'EB 방향 끄기' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '방향 적용' }));
+  fireEvent.click(screen.getByRole('button', { name: '적용' }));
   expect(onSave).toHaveBeenCalledWith(['SB', 'NB', 'EB']);
 });
 

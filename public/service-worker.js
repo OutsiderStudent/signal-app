@@ -1,5 +1,8 @@
 const CACHE_NAME = 'signal-app-v2-shell';
-const APP_SHELL = ['/', '/index.html', '/manifest.json', '/signal-app-icon.png'];
+const APP_SHELL = [
+  '/', '/index.html', '/manifest.json',
+  '/signal-survey-192.png', '/signal-survey-512.png', '/signal-survey-apple-180.png',
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));

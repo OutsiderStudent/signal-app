@@ -231,7 +231,7 @@ const showConfirm = (message, onConfirm, onDeny, onCancel) => {
             <p class="text-gray-800 dark:text-gray-200">${message}</p>
             <div class="flex justify-end gap-4 mt-6">
                 ${onCancel ? `<button id="cancelBtn-${modalId}" class="p-2 px-4 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold transition-colors">취소</button>` : ''}
-                ${onDeny ? `<button id="denyBtn-${modalId}" class="p-2 px-4 bg-red-600 text-white hover:bg-red-700 rounded-md font-semibold transition-colors">${onCancel ? '저장 안함' : '삭제'}</button>` : ''}
+                ${onDeny ? `<button id="denyBtn-${modalId}" class="p-2 px-4 bg-red-600 text-white hover:bg-red-700 rounded-md font-semibold transition-colors">${onCancel ? '저장 안 함' : '삭제'}</button>` : ''}
                 <button id="confirmBtn-${modalId}" class="p-2 px-4 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">${onDeny ? '저장' : '확인'}</button>
             </div>
         </div>
@@ -585,7 +585,7 @@ const currentLocalDateTime = () => {
 
 export const PhaseMovementSummary = ({ movements = [], isPermissive = false }) => {
     if (!movements.length) {
-        return <span className="inline-flex items-center gap-2 text-sm font-semibold text-red-500"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />올레드</span>;
+        return <span className="inline-flex items-center gap-2 text-sm font-semibold text-red-500"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />이동류 미입력</span>;
     }
     return (
         <div className="flex flex-wrap gap-1.5" aria-label={formatPhaseMovements(movements)}>
@@ -638,7 +638,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     const handleExport = () => {
         const csvContent = buildExportCsv(projects, intersectionsData, selectedProjects);
         if (!csvContent) {
-            showAlert("내보낼 데이터가 없습니다. 프로젝트를 선택해주세요.");
+            showAlert("선택한 프로젝트에 내보낼 교차로가 없습니다.");
             return;
         }
 
@@ -657,7 +657,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     const handleXlsxExport = () => {
         const tables = buildWorkbookData(projects, intersectionsData, selectedProjects);
         if (!tables.프로젝트.length) {
-            showAlert("내보낼 프로젝트를 선택해주세요.");
+            showAlert("내보낼 프로젝트를 선택하세요.");
             return;
         }
         const workbook = XLSX.utils.book_new();
@@ -667,13 +667,13 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
             XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
         });
         XLSX.writeFile(workbook, `신호현시조사_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        showToast('XLSX 파일을 만들었습니다.');
+        showToast('Excel 파일을 내보냈습니다.');
     };
 
     const handleGeoJsonExport = () => {
         const geoJson = buildGeoJson(projects, intersectionsData, selectedProjects);
         if (!geoJson.features.length) {
-            showAlert('위치가 저장된 교차로가 있는 프로젝트를 선택해주세요.');
+            showAlert('위치가 저장된 교차로가 있는 프로젝트를 선택하세요.');
             return;
         }
         const blob = new Blob([JSON.stringify(geoJson, null, 2)], { type: 'application/geo+json;charset=utf-8' });
@@ -683,13 +683,13 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
         link.download = `신호현시조사_위치_${new Date().toISOString().slice(0, 10)}.geojson`;
         link.click();
         URL.revokeObjectURL(url);
-        showToast('GIS용 GeoJSON 파일을 만들었습니다.');
+        showToast('교차로 좌표를 내보냈습니다.');
     };
 
     const handleJsonBackup = () => {
         const selected = projects.filter(project => selectedProjects[project.id]);
         if (!selected.length) {
-            showAlert("백업할 프로젝트를 선택해주세요.");
+            showAlert("백업할 프로젝트를 선택하세요.");
             return;
         }
         const backup = {
@@ -705,26 +705,26 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
         link.download = `신호현시조사_백업_${new Date().toISOString().slice(0, 10)}.json`;
         link.click();
         URL.revokeObjectURL(url);
-        showToast('JSON 전체 백업을 만들었습니다.');
+        showToast('백업 저장 (.json)을 만들었습니다.');
     };
 
     const handlePdfPreview = () => {
         const selected = projects.filter(project => selectedProjects[project.id]);
         if (!selected.length) {
-            showAlert("보고서 시안을 볼 프로젝트를 선택해주세요.");
+            showAlert("보고서에 넣을 프로젝트를 선택하세요.");
             return;
         }
         const sections = selected.flatMap(project => (intersectionsData[project.id] || []).map(intersection => {
             const phases = (intersection.phases || []).map((phase, index) => `
                 <tr><td>P${index + 1}</td><td>${escapeHtml(formatPhaseMovements(normalizePhaseMovements(phase)))}</td><td>${escapeHtml(phase.times?.at(-1) ?? '-')}</td><td>${phase.isPermissive ? '비보호' : '-'}</td></tr>`).join('');
-            return `<section class="page"><div class="eyebrow">${escapeHtml(project.name)} · ${escapeHtml(getIntersectionStatus(intersection))}</div><h1>${escapeHtml(intersection.number)}. ${escapeHtml(intersection.name)}</h1><div class="meta"><span>${(intersection.directions || DEFAULT_DIRECTIONS).length}지 교차로</span><span>조사자 ${escapeHtml(intersection.surveyor || '미입력')}</span><span>${escapeHtml(intersection.surveyedAt || formatSavedAt(intersection.savedAt))}</span><span>${escapeHtml(intersection.location ? `${intersection.location.lat.toFixed(6)}, ${intersection.location.lng.toFixed(6)}` : '위치 미입력')}</span></div><div class="map">교차로 위치 지도 영역<div>${escapeHtml((intersection.directions || DEFAULT_DIRECTIONS).join(' · '))}</div></div><table><thead><tr><th>현시</th><th>이동류 구성</th><th>시간(초)</th><th>비고</th></tr></thead><tbody>${phases || '<tr><td colspan="4">현시 정보 없음</td></tr>'}</tbody></table><div class="memo"><b>현장 메모</b><p>${escapeHtml(intersection.memo || '기록 없음')}</p></div><footer>신호 현시 현장조사 · v2.0.0 · ${escapeHtml(new Date().toLocaleString('ko-KR'))}</footer></section>`;
+            return `<section class="page"><div class="eyebrow">${escapeHtml(project.name)} · ${escapeHtml(getIntersectionStatus(intersection))}</div><h1>${escapeHtml(intersection.number)}. ${escapeHtml(intersection.name)}</h1><div class="meta"><span>${(intersection.directions || DEFAULT_DIRECTIONS).length}지 교차로</span><span>조사자 ${escapeHtml(intersection.surveyor || '미입력')}</span><span>${escapeHtml(intersection.surveyedAt || formatSavedAt(intersection.savedAt))}</span><span>${escapeHtml(intersection.location ? `${intersection.location.lat.toFixed(6)}, ${intersection.location.lng.toFixed(6)}` : '위치 미입력')}</span></div><div class="map">접근로 방향<div>${escapeHtml((intersection.directions || DEFAULT_DIRECTIONS).join(' · '))}</div></div><table><thead><tr><th>현시</th><th>이동류 구성</th><th>시간(초)</th><th>비고</th></tr></thead><tbody>${phases || '<tr><td colspan="4">현시 정보 없음</td></tr>'}</tbody></table><div class="memo"><b>현장 메모</b><p>${escapeHtml(intersection.memo || '기록 없음')}</p></div><footer>신호 현시 현장조사 · v2.0.0 · ${escapeHtml(new Date().toLocaleString('ko-KR'))}</footer></section>`;
         })).join('');
         const preview = window.open('', '_blank');
         if (!preview) {
-            showAlert('보고서 시안 창을 열 수 없습니다. 팝업 차단을 확인해주세요.');
+            showAlert('보고서를 열려면 이 사이트의 팝업을 허용하세요.');
             return;
         }
-        preview.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>신호현시조사 PDF 보고서 시안</title><style>body{margin:0;background:#e9eef7;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#152033}.page{box-sizing:border-box;width:210mm;min-height:297mm;margin:20px auto;padding:18mm;background:#fff;box-shadow:0 20px 60px #23395d22;page-break-after:always}.eyebrow{color:#2563eb;font-weight:700;font-size:12px;letter-spacing:.04em}h1{font-size:28px;margin:8px 0 10px}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{padding:7px 10px;border-radius:999px;background:#eef4ff;font-size:11px}.map{height:86mm;margin:18px 0;border-radius:22px;background:linear-gradient(135deg,#e9f2ff,#d9e8f5);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#54708e;font-weight:700}.map div{margin-top:9px;font-size:12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#162a46;color:white;text-align:left}th,td{padding:10px;border-bottom:1px solid #e5eaf1}.memo{margin-top:18px;padding:14px;border-radius:16px;background:#f7f9fc;font-size:12px}.memo p{margin:6px 0 0;white-space:pre-wrap}footer{margin-top:22px;color:#8995a6;font-size:10px;text-align:right}@media print{body{background:white}.page{margin:0;box-shadow:none}}</style></head><body>${sections || '<section class="page"><h1>교차로 정보 없음</h1></section>'}</body></html>`);
+        preview.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>신호현시조사 보고서 미리보기</title><style>body{margin:0;background:#e9eef7;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;color:#152033}.page{box-sizing:border-box;width:210mm;min-height:297mm;margin:20px auto;padding:18mm;background:#fff;box-shadow:0 20px 60px #23395d22;page-break-after:always}.eyebrow{color:#2563eb;font-weight:700;font-size:12px;letter-spacing:.04em}h1{font-size:28px;margin:8px 0 10px}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{padding:7px 10px;border-radius:999px;background:#eef4ff;font-size:11px}.map{height:86mm;margin:18px 0;border-radius:22px;background:linear-gradient(135deg,#e9f2ff,#d9e8f5);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#54708e;font-weight:700}.map div{margin-top:9px;font-size:12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#162a46;color:white;text-align:left}th,td{padding:10px;border-bottom:1px solid #e5eaf1}.memo{margin-top:18px;padding:14px;border-radius:16px;background:#f7f9fc;font-size:12px}.memo p{margin:6px 0 0;white-space:pre-wrap}footer{margin-top:22px;color:#8995a6;font-size:10px;text-align:right}@media print{body{background:white}.page{margin:0;box-shadow:none}}</style></head><body>${sections || '<section class="page"><h1>교차로 정보 없음</h1></section>'}</body></html>`);
         preview.document.close();
     };
 
@@ -736,7 +736,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
             const backup = JSON.parse(await file.text());
             const summary = validateBackup(backup);
             const confirmed = await new Promise(resolve => showConfirm(
-                `${summary.projectCount}개 프로젝트와 ${summary.intersectionCount}개 교차로를 새 항목으로 복원합니다. 계속하시겠습니까?`,
+                `프로젝트 ${summary.projectCount}개, 교차로 ${summary.intersectionCount}개를 복원할까요? 기존 자료는 유지됩니다.`,
                 () => resolve(true),
                 null,
                 () => resolve(false),
@@ -770,7 +770,7 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
                     });
                 }
             }
-            showToast(`${backup.projects.length}개 프로젝트를 새 항목으로 복원했습니다.`);
+            showToast(`${backup.projects.length}개 프로젝트를 복원했습니다.`);
             onClose();
         } catch (error) {
             console.error('JSON restore failed:', error);
@@ -785,9 +785,9 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div role="dialog" aria-modal="true" aria-labelledby="export-modal-title" className="glass-modal flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden p-5" onClick={e => e.stopPropagation()}>
-                <h3 id="export-modal-title" className="mb-4 text-lg font-bold dark:text-white">내보낼 데이터 선택</h3>
+                <h3 id="export-modal-title" className="mb-4 text-lg font-bold dark:text-white">내보내기 및 백업</h3>
                 <div className="min-h-0 flex-1 overflow-y-auto space-y-2">
-                    {isLoading ? <p className="dark:text-gray-300">데이터 로딩 중...</p> : projects.map(project => (
+                    {isLoading ? <p className="dark:text-gray-300">내보낼 자료를 불러오는 중…</p> : projects.map(project => (
                         <div key={project.id} className="p-2 border dark:border-gray-700 rounded-md">
                             <label className="flex items-center gap-2 font-semibold dark:text-gray-200">
                                 <input
@@ -802,13 +802,13 @@ const ExportModal = ({ isOpen, onClose, projects, db, userId, appId }) => {
                     ))}
                 </div>
                 <div className="mt-5 grid gap-2">
-                    <button onClick={handleXlsxExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400">XLSX로 내보내기</button>
-                    <button onClick={handleGeoJsonExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-cyan-700 px-4 py-2 font-semibold text-white hover:bg-cyan-800 disabled:bg-gray-400">GeoJSON 위치 내보내기</button>
-                    <button onClick={handlePdfPreview} disabled={isLoading} className="min-h-11 rounded-2xl bg-slate-800 px-4 py-2 font-semibold text-white hover:bg-slate-900 disabled:bg-gray-400">PDF 보고서 시안 보기</button>
-                    <button onClick={handleJsonBackup} disabled={isLoading} className="min-h-11 rounded-2xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:bg-gray-400">JSON 전체 백업</button>
+                    <button onClick={handleXlsxExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400">Excel 내보내기 (.xlsx)</button>
+                    <button onClick={handleGeoJsonExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-cyan-700 px-4 py-2 font-semibold text-white hover:bg-cyan-800 disabled:bg-gray-400">교차로 좌표 (.geojson)</button>
+                    <button onClick={handlePdfPreview} disabled={isLoading} className="min-h-11 rounded-2xl bg-slate-800 px-4 py-2 font-semibold text-white hover:bg-slate-900 disabled:bg-gray-400">보고서 미리보기</button>
+                    <button onClick={handleJsonBackup} disabled={isLoading} className="min-h-11 rounded-2xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:bg-gray-400">백업 저장 (.json)</button>
                     <input ref={importInputRef} type="file" accept="application/json,.json" onChange={handleJsonImport} className="hidden" />
-                    <button onClick={() => importInputRef.current?.click()} disabled={isLoading || isImporting} className="min-h-11 rounded-2xl bg-emerald-50 px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-100 disabled:bg-gray-200 dark:bg-emerald-400/10 dark:text-emerald-300">{isImporting ? '백업 복원 중…' : 'JSON 백업 가져오기'}</button>
-                    <button onClick={handleExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-white/60 px-4 py-2 font-semibold text-gray-700 hover:bg-white dark:bg-white/5 dark:text-gray-200">CSV 호환 파일</button>
+                    <button onClick={() => importInputRef.current?.click()} disabled={isLoading || isImporting} className="min-h-11 rounded-2xl bg-emerald-50 px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-100 disabled:bg-gray-200 dark:bg-emerald-400/10 dark:text-emerald-300">{isImporting ? '백업 복원 중…' : '백업 복원'}</button>
+                    <button onClick={handleExport} disabled={isLoading} className="min-h-11 rounded-2xl bg-white/60 px-4 py-2 font-semibold text-gray-700 hover:bg-white dark:bg-white/5 dark:text-gray-200">CSV 내보내기</button>
                     <button onClick={onClose} className="min-h-11 rounded-2xl px-4 py-2 font-semibold text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5">닫기</button>
                 </div>
             </div>
@@ -840,7 +840,7 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                         <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Smartphone size={20}/> 기록 진동</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${vibrationSupported && vibrationEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{vibrationSupported ? (vibrationEnabled ? '켜짐' : '꺼짐') : '미지원'}</span>
                     </button>
-                    {!vibrationSupported && <p id="vibration-support-note" className="-mt-2 px-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{isIos ? 'iPhone·iPad 웹앱은 시스템 진동을 지원하지 않습니다. 효과음과 버튼 애니메이션이 대신 동작합니다.' : '이 브라우저는 웹 진동을 지원하지 않습니다. 효과음과 버튼 애니메이션이 대신 동작합니다.'}</p>}
+                    {!vibrationSupported && <p id="vibration-support-note" className="-mt-2 px-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{isIos ? 'iPhone과 iPad에서는 진동을 사용할 수 없습니다.' : '이 브라우저에서는 진동을 사용할 수 없습니다.'}</p>}
                     <button onClick={onToggleSound} className="min-h-12 w-full flex items-center justify-between p-3 bg-white/55 dark:bg-white/5 rounded-2xl hover:bg-white/80 dark:hover:bg-white/10">
                         <span className="flex items-center gap-3 font-semibold dark:text-gray-200"><Volume2 size={20}/> 기록 효과음</span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${soundEnabled ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-300'}`}>{soundEnabled ? '켜짐' : '꺼짐'}</span>
@@ -851,12 +851,12 @@ export const SettingsModal = ({ isOpen, onClose, isDarkMode, onToggleDarkMode, v
                             <Smartphone size={20}/> 홈 화면에 앱 설치
                         </div>
                         {isInstalled ? (
-                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">이 기기에 앱으로 설치되어 있습니다.</p>
+                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">설치됨</p>
                         ) : canInstall ? (
                             <>
-                                <p className="mb-3 text-sm leading-6 text-blue-900/80 dark:text-blue-100/80">아래 버튼을 누르면 일반 앱처럼 홈 화면에서 실행할 수 있습니다.</p>
+                                <p className="mb-3 text-sm leading-6 text-blue-900/80 dark:text-blue-100/80">설치하면 홈 화면에서 바로 열 수 있습니다.</p>
                                 <button onClick={onInstall} className="min-h-12 w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700">
-                                    지금 설치하기
+                                    설치
                                 </button>
                             </>
                         ) : isIos ? (
@@ -903,14 +903,14 @@ const AddProjectModal = ({ isOpen, onClose, onSave, initialName }) => {
         if (projectName.trim()) {
             onSave(projectName.trim());
         } else {
-            showAlert("프로젝트 이름을 입력해주세요.");
+            showAlert("프로젝트 이름을 입력하세요.");
         }
     };
 
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4">
             <div className="glass-modal p-6 w-full max-w-sm">
-                <h3 className="text-lg font-bold mb-4 dark:text-white">새 프로젝트 추가</h3>
+                <h3 className="text-lg font-bold mb-4 dark:text-white">프로젝트 추가</h3>
                 <input
                     type="text"
                     value={projectName}
@@ -957,7 +957,7 @@ export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDi
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div className="glass-modal max-h-[92vh] w-full max-w-lg overflow-y-auto p-5 sm:p-6" onClick={event => event.stopPropagation()}>
                 <h3 className="text-lg font-bold dark:text-white">교차로 방향 설정</h3>
-                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">실제 접근로 방향만 켜세요. 기본 방향도 끌 수 있어 3지 교차로를 표현할 수 있습니다.</p>
+                <p className="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">교차로의 접근로 방향을 3개 이상 선택하세요.</p>
                 <div className="relative mx-auto mt-4 aspect-square w-full max-w-[20rem]" role="group" aria-label="나침반형 교차로 방향 선택">
                     <div className="absolute inset-[32%] flex flex-col items-center justify-center rounded-full border border-white/80 bg-white/65 text-center shadow-inner backdrop-blur-md dark:border-white/10 dark:bg-white/5">
                         <strong className="text-2xl text-blue-700 dark:text-blue-300">{selectedDirections.length}지</strong>
@@ -989,11 +989,11 @@ export const DirectionSettingsModal = ({ directions = DEFAULT_DIRECTIONS, usedDi
                     <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />비활성</span>
                     <span>최소 3개 방향</span>
                 </div>
-                <div className="mt-3 rounded-2xl bg-white/55 p-3 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">활성 방향 {orderedDirections.length}개: <strong>{orderedDirections.join(' · ')}</strong></div>
-                {usedDirections.some(direction => selectedDirections.includes(direction)) && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">‘사용 중’ 방향은 현시와 지도 방향표시에서 먼저 해제해야 끌 수 있습니다.</p>}
+                <div className="mt-3 rounded-2xl bg-white/55 p-3 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">선택한 방향 {orderedDirections.length}개: <strong>{orderedDirections.join(' · ')}</strong></div>
+                {usedDirections.some(direction => selectedDirections.includes(direction)) && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">사용 중인 방향을 끄려면 현시와 지도에서 해당 방향을 먼저 해제하세요.</p>}
                 <div className="mt-5 flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-2xl bg-gray-200 dark:bg-gray-600 font-semibold">취소</button>
-                    <button type="button" onClick={() => onSave(orderedDirections)} className="px-5 py-2 rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700">방향 적용</button>
+                    <button type="button" onClick={() => onSave(orderedDirections)} className="px-5 py-2 rounded-2xl bg-blue-600 text-white font-semibold hover:bg-blue-700">적용</button>
                 </div>
             </div>
         </div>
@@ -1013,8 +1013,8 @@ export const PhaseSelectionModal = ({ directions = DEFAULT_DIRECTIONS, initialMo
     return (
         <div className="glass-backdrop fixed inset-0 flex justify-center items-center z-50 p-4" onClick={onClose}>
             <div className="glass-modal p-4 sm:p-6 w-full max-w-2xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold mb-1 dark:text-white">현시 이동류 조합</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">방향별 이동류를 여러 개 선택해 하나의 현시를 만드세요. 현시마다 이동류를 하나 이상 선택해야 합니다.</p>
+                <h3 className="text-lg font-bold mb-1 dark:text-white">이동류 선택</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">이 현시에 해당하는 이동류를 하나 이상 선택하세요.</p>
                 <div className="grid grid-cols-[3rem_repeat(3,minmax(0,1fr))] gap-1.5 sm:gap-2" role="grid" aria-label={`${directions.length}방향 3이동류 선택표`}>
                     <div aria-hidden="true" />
                     {MOVEMENT_TYPES.map(type => <div key={type} className="text-center text-[11px] sm:text-sm font-semibold text-gray-600 dark:text-gray-300 break-keep">{type}</div>)}
@@ -1041,13 +1041,13 @@ export const PhaseSelectionModal = ({ directions = DEFAULT_DIRECTIONS, initialMo
                     ))}
                 </div>
                 <div className="mt-4 rounded-2xl bg-white/55 dark:bg-white/5 border border-white/60 dark:border-white/10 p-3 text-sm text-gray-700 dark:text-gray-200 min-h-11">
-                    <span className="font-semibold">선택 현시: </span>{formatPhaseMovements(selectedMovements)}
+                    <span className="font-semibold">선택한 이동류: </span>{selectedMovements.length ? formatPhaseMovements(selectedMovements) : '선택한 이동류 없음'}
                 </div>
                 <div className="mt-5 flex flex-wrap justify-between gap-2">
                     <button type="button" onClick={() => setSelectedMovements([])} className="p-2 px-4 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md font-semibold">전체 해제</button>
                     <div className="flex gap-2 ml-auto">
                         <button type="button" onClick={onClose} className="p-2 px-4 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-md font-semibold">취소</button>
-                        <button type="button" onClick={() => selectedMovements.length ? onSave(selectedMovements) : showAlert('이동류를 하나 이상 선택해주세요.')} className="p-2 px-5 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold">현시 적용</button>
+                        <button type="button" onClick={() => selectedMovements.length ? onSave(selectedMovements) : showAlert('이동류를 하나 이상 선택하세요.')} className="p-2 px-5 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold">적용</button>
                     </div>
                 </div>
             </div>
@@ -1144,7 +1144,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
             if (!navigator.onLine) {
                 setFullSaveState('offline');
                 setIsSaving(false);
-                showToast('기기에 저장했습니다. 연결되면 서버에 동기화됩니다.');
+                showToast('기기에 저장했습니다. 연결되면 서버에 전송합니다.');
                 pendingWrite.catch(error => {
                     console.error('Queued save failed:', error);
                     setFullSaveState('error');
@@ -1154,11 +1154,11 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
             await pendingWrite;
             localStorage.removeItem(draftKey);
             setFullSaveState('saved');
-            showToast("모든 변경사항을 서버에 저장했습니다.");
+            showToast("저장했습니다.");
         } catch (error) {
             console.error("Failed to save data:", error);
             setFullSaveState('error');
-            showToast("저장에 실패했습니다.", 'error');
+            showToast("저장하지 못했습니다. 다시 시도하세요.", 'error');
         } finally {
             setIsSaving(false);
         }
@@ -1167,7 +1167,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
     const handleBack = () => {
         if (isDirty) {
             showConfirm(
-                "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?",
+                "변경사항을 저장하고 목록으로 돌아갈까요?",
                 () => { handleSaveAll().then(onBack) }, // Save and go back
                 () => { localStorage.removeItem(draftKey); onBack(); }, // Don't save and go back
                 () => {} // Cancel
@@ -1226,12 +1226,12 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                     setSurveyedAt(shouldRestoreDraft ? (draft.surveyedAt || currentLocalDateTime()) : (data.surveyedAt || currentLocalDateTime()));
                     setPhases(shouldRestoreDraft ? draft.phases : validPhases);
                     setDirections(shouldRestoreDraft ? draft.directions : validDirections);
-                    if (shouldRestoreDraft) showToast('저장 전 현장 기록을 복구했습니다.');
+                    if (shouldRestoreDraft) showToast('이전에 작성하던 기록을 불러왔습니다.');
                 }
                 hydratedRef.current = true;
             } else {
                 console.warn(`Intersection document (${docRef.path}) no longer exists. Navigating back.`);
-                showAlert("교차로 데이터가 삭제되었거나 찾을 수 없습니다. 목록으로 돌아갑니다.");
+                showAlert("교차로를 찾을 수 없습니다.");
                 onBack();
             }
         });
@@ -1437,10 +1437,10 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                     map.panTo(newLoc);
                     map.setZoom(17);
                 }
-                showToast('현재 위치로 이동했습니다. 교차로 위치는 변경되지 않았습니다.');
-            }, () => showAlert('현재 위치를 가져올 수 없습니다. 브라우저의 위치 정보 접근 권한을 확인해주세요.'));
+                showToast('현재 위치로 이동했습니다.');
+            }, () => showAlert('현재 위치를 찾을 수 없습니다. 브라우저의 위치 권한을 확인하세요.'));
         } else {
-            showAlert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.');
+            showAlert('이 브라우저에서는 현재 위치를 확인할 수 없습니다.');
         }
     };
 
@@ -1457,7 +1457,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
         if (!position) return;
         if (areCoordinatesEqual(position, mapCenter)) {
             setIsLocationEditing(false);
-            showToast('저장된 교차로 위치를 유지했습니다.');
+            showToast('이미 저장된 위치입니다.');
             return;
         }
         const previousSpatial = lastSyncedSpatialRef.current;
@@ -1488,7 +1488,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
             setIsLocationSaving(false);
             showToast('교차로 위치를 저장하지 못했습니다. 다시 지정해 주세요.', 'error');
         });
-        showToast(navigator.onLine ? '교차로 위치를 저장하는 중입니다.' : '교차로 위치를 기기에 저장했습니다. 연결되면 동기화됩니다.');
+        showToast(navigator.onLine ? '위치 저장 중…' : '위치를 기기에 저장했습니다.');
     };
     
     const addMapIcon = (dir) => {
@@ -1606,8 +1606,8 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
         if (isRecordModeActive || phases.length <= 1) return;
         const phaseToRemove = phases[indexToRemove];
         const confirmationMessage = (phaseToRemove.times && phaseToRemove.times.length > 0)
-            ? '이 현시에는 기록된 시간이 있습니다. 정말로 삭제하시겠습니까?'
-            : '정말로 이 현시를 삭제하시겠습니까?';
+            ? '이 현시와 측정 시간을 삭제할까요?'
+            : '이 현시를 삭제할까요?';
         showConfirm(confirmationMessage, () => {
             const newPhases = phases.filter((_, i) => i !== indexToRemove);
             updatePhases(newPhases);
@@ -1691,14 +1691,14 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                                 {!isGoogleMapsApiKeyConfigured &&
                                     <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-red-50 text-red-700 p-4 text-center">
                                         <AlertTriangle size={48} className="mb-4" />
-                                        <p className="text-lg font-bold">Google Maps API 키가 유효하지 않습니다.</p>
-                                        <p className="text-sm font-normal mt-2">코드 상단의 'YOUR_GOOGLE_MAPS_API_KEY'를<br />실제 API 키로 교체해주세요.</p>
+                                        <p className="text-lg font-bold">지도를 불러올 수 없습니다.</p>
+                                        <p className="text-sm font-normal mt-2">문제가 계속되면 관리자에게 문의하세요.</p>
                                     </div>
                                 }
                             </div>
                             {isLocationEditing && <div className="pointer-events-none absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/90 p-2 text-white shadow-[0_0_0_5px_rgba(255,255,255,.9)]" aria-hidden="true"><Crosshair size={24} /></div>}
                             <button type="button" onClick={() => setIsRegionPickerOpen(open => !open)} aria-expanded={isRegionPickerOpen} aria-controls="region-picker" className="absolute left-3 top-3 z-10 flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-lg dark:bg-gray-800 dark:text-white">
-                                <MapPin size={17} className="text-blue-600" /> 지역으로 이동 <ChevronDown size={16} />
+                                <MapPin size={17} className="text-blue-600" /> 지역 선택 <ChevronDown size={16} />
                             </button>
                             {isRegionPickerOpen && <div id="region-picker" className="region-picker absolute left-3 top-16 z-20 w-[min(18rem,calc(100%-6rem))] space-y-2 rounded-2xl bg-white/95 p-3 shadow-xl backdrop-blur-lg dark:bg-slate-800/95">
                                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300" htmlFor="region-province">시·도</label>
@@ -1723,21 +1723,21 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                             </div>
                         </div>
                         <div className="region-preview mt-3 rounded-2xl bg-blue-50 px-3 py-3 text-xs text-blue-900 dark:bg-blue-950/70 dark:text-blue-100" role="status">
-                            <div className="flex items-center gap-2 font-bold"><LockKeyhole size={16} /> {mapCenter ? '교차로 위치 잠금' : '교차로 위치 미지정'}</div>
-                            <p className="mt-1">지도 이동·지역 이동·GPS는 저장된 위치를 바꾸지 않습니다. {isLocationEditing ? '파란 조준점을 교차로에 맞춘 뒤 위치를 확정하세요.' : mapCenter ? '빨간 핀이 확정된 위치입니다.' : '위치 지정 버튼을 눌러 교차로를 표시하세요.'}</p>
+                            <div className="flex items-center gap-2 font-bold"><LockKeyhole size={16} /> {mapCenter ? '교차로 위치 고정' : '교차로 위치 미지정'}</div>
+                            <p className="mt-1">{isLocationEditing ? '지도를 움직여 파란 조준점을 교차로 중심에 맞추세요.' : mapCenter ? '빨간 핀이 저장된 위치입니다. 지도를 움직여도 핀은 그대로 유지됩니다.' : '위치 지정을 눌러 교차로 중심을 표시하세요.'}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {isLocationEditing ? <>
-                                    <button type="button" onClick={handleLocationConfirm} disabled={!map || isLocationSaving} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 font-bold text-white disabled:opacity-50">이 위치로 확정</button>
+                                    <button type="button" onClick={handleLocationConfirm} disabled={!map || isLocationSaving} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 font-bold text-white disabled:opacity-50">위치 저장</button>
                                     <button type="button" onClick={() => setIsLocationEditing(false)} className="min-h-11 rounded-xl bg-white px-3 font-semibold text-blue-800 dark:bg-slate-800 dark:text-blue-100">취소</button>
                                 </> : <>
                                     <button type="button" onClick={() => setIsLocationEditing(true)} disabled={!map || isLocationSaving} className="min-h-11 flex-1 rounded-xl bg-blue-600 px-3 font-bold text-white disabled:opacity-50">{mapCenter ? '위치 변경' : '위치 지정'}</button>
-                                    {mapCenter && <button type="button" onClick={() => { map?.panTo(mapCenter); map?.setZoom(17); }} className="min-h-11 rounded-xl bg-white px-3 font-semibold text-blue-800 dark:bg-slate-800 dark:text-blue-100">저장 위치로 이동</button>}
+                                    {mapCenter && <button type="button" onClick={() => { map?.panTo(mapCenter); map?.setZoom(17); }} className="min-h-11 rounded-xl bg-white px-3 font-semibold text-blue-800 dark:bg-slate-800 dark:text-blue-100">저장 위치 보기</button>}
                                 </>}
                             </div>
                         </div>
                          <div className="mt-4 p-4 content-surface">
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">방향 아이콘 (클릭하여 지도에 추가/삭제)</h3>
+                                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">지도 방향 표시</h3>
                                 <div className="flex items-center justify-start gap-3 flex-wrap">
                                     {directions.map(dir => (
                                         <button
@@ -1749,11 +1749,11 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                                         </button>
                                     ))}
                                 </div>
-                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">아이콘은 교차로 중심 기준 접근로 방향에 놓입니다. 드래그해 실제 위치로 옮길 수 있습니다.</p>
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">방향을 눌러 지도에 표시하세요. 표시는 끌어서 옮길 수 있습니다.</p>
                             </div>
                             <div className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${spatialSaveState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-400/15 dark:text-red-300' : spatialSaveState === 'offline' ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300' : 'bg-teal-50 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300'}`} role="status">
                                 {spatialSaveState === 'saving' ? <RefreshCw size={17} className="animate-spin" /> : spatialSaveState === 'error' || spatialSaveState === 'offline' ? <AlertTriangle size={17} /> : <CheckCircle size={17} />}
-                                {spatialSaveState === 'saving' ? '확정 위치·방향 저장 중' : spatialSaveState === 'error' ? '위치·방향 저장 실패 · 다시 시도 필요' : spatialSaveState === 'offline' ? '확정 위치·방향 기기에 저장됨 · 연결 시 동기화' : mapCenter ? '확정 위치·방향 저장 완료' : '교차로 위치 미지정 · 위치 지정 후 저장'}
+                                {spatialSaveState === 'saving' ? '위치·방향 저장 중…' : spatialSaveState === 'error' ? '위치·방향 저장 실패' : spatialSaveState === 'offline' ? '기기에 저장됨 · 전송 대기' : mapCenter ? '위치·방향 저장됨' : '위치 미지정'}
                             </div>
                         </div>
                     </>
@@ -1781,7 +1781,7 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                                 <div className="flex items-center gap-1.5">
                                     <div className="flex items-stretch gap-1.5 flex-grow min-w-0">
                                         <span className="flex-shrink-0 flex items-center justify-center h-11 min-w-11 px-2 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-sm">P{index + 1}</span>
-                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} aria-label={`${index + 1}번 현시 이동류 조합 편집`} title="눌러서 현시 이동류 조합 편집" className="group w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 min-h-11 bg-white/55 dark:bg-white/5 hover:bg-blue-50/90 dark:hover:bg-blue-400/10 rounded-2xl border border-white/70 hover:border-blue-300 dark:border-white/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 min-w-0 text-left transition-all">
+                                        <button onClick={() => handlePhaseTypeClick(index)} disabled={isRecordModeActive} aria-label={`${index + 1}번 현시 이동류 조합 편집`} title="이동류 편집" className="group w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 min-h-11 bg-white/55 dark:bg-white/5 hover:bg-blue-50/90 dark:hover:bg-blue-400/10 rounded-2xl border border-white/70 hover:border-blue-300 dark:border-white/10 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 min-w-0 text-left transition-all">
                                             <PhaseMovementSummary movements={phase.movements} isPermissive={phase.isPermissive} />
                                             <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300"><Edit size={14} /><span className="hidden sm:inline">이동류 편집</span></span>
                                         </button>
@@ -1851,11 +1851,11 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                     <div className="mt-2">
                         <button onClick={handleAddPhase} disabled={isRecordModeActive} className="min-h-11 w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-blue-300 dark:border-blue-400/30 rounded-xl sm:rounded-2xl text-sm text-blue-600 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-400/5 hover:bg-blue-100/70 dark:hover:bg-blue-400/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             <Plus size={18} />
-                            현시 추가 (현재 {phases.length}개 · 제한 없음)
+                            현시 추가
                         </button>
                     </div>
                     <div className="mt-3 border-t dark:border-gray-700 pt-3">
-                         <h3 className="text-sm sm:text-base font-semibold text-center mb-2 dark:text-white">연속 시간 기록 모드</h3>
+                         <h3 className="text-sm sm:text-base font-semibold text-center mb-2 dark:text-white">현시 순서대로 측정</h3>
                          <button 
                             onClick={isRecordModeActive ? handleRecordAndNext : handleToggleRecordMode}
                             disabled={timer.active && !isRecordModeActive}
@@ -1864,18 +1864,18 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                             {isRecordModeActive ? (
                                 <>
                                     <Square size={20} />
-                                    <span>{currentRecordingPhaseIndex + 1}번 현시 기록 및 다음</span>
+                                    <span>{currentRecordingPhaseIndex + 1 < phases.length ? '기록 후 다음' : '기록 완료'}</span>
                                 </>
                             ) : (
                                 <>
                                     <Play size={20} />
-                                    <span>시간 기록 모드 시작</span>
+                                    <span>측정 시작</span>
                                 </>
                             )}
                         </button>
                         {isRecordModeActive && 
                              <button onClick={handleToggleRecordMode} className="w-full mt-2 p-2 rounded-lg bg-gray-600 hover:bg-gray-700 text-white font-semibold">
-                                 기록 모드 정지
+                                 측정 중지
                              </button>
                         }
                     </div>
@@ -1888,30 +1888,30 @@ export const IntersectionDetail = ({ intersection, db, userId, appId, onBack, pr
                     <textarea 
                         value={memo}
                         onChange={(e) => setMemo(e.target.value)}
-                        placeholder="현장 특이사항, 주변 여건 등 자유롭게 메모하세요..."
+                        placeholder="현장 특이사항"
                         rows={3}
                         className="min-h-24 w-full resize-y p-4 border border-white/70 dark:border-white/10 rounded-3xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white/55 dark:bg-white/5 dark:text-white"
                     ></textarea>
                </div>
             </section>
             
-            {isRecordModeActive && currentRecordingPhaseIndex !== null && <div className="fixed inset-x-3 z-50 mx-auto max-w-md rounded-[2rem] border border-white/70 bg-slate-950/92 p-4 text-white shadow-2xl backdrop-blur-xl" style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }} role="region" aria-label="현시 기록 집중 모드">
+            {isRecordModeActive && currentRecordingPhaseIndex !== null && <div className="fixed inset-x-3 z-50 mx-auto max-w-md rounded-[2rem] border border-white/70 bg-slate-950/92 p-4 text-white shadow-2xl backdrop-blur-xl" style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }} role="region" aria-label="현시 측정">
                 <div className="mb-3 flex items-start justify-between gap-3">
-                    <div><p className="text-xs font-bold text-blue-300">현시 기록 집중 모드</p><p className="mt-1 text-2xl font-black">P{currentRecordingPhaseIndex + 1} · {timer.elapsed.toFixed(1)}초</p></div>
-                    <button onClick={handleToggleRecordMode} className="min-h-11 rounded-xl bg-white/10 px-3 text-sm font-bold">기록 정지</button>
+                    <div><p className="text-xs font-bold text-blue-300">현시 측정</p><p className="mt-1 text-2xl font-black">P{currentRecordingPhaseIndex + 1} · {timer.elapsed.toFixed(1)}초</p></div>
+                    <button onClick={handleToggleRecordMode} className="min-h-11 rounded-xl bg-white/10 px-3 text-sm font-bold">측정 중지</button>
                 </div>
                 <div className="mb-3 rounded-2xl bg-white/10 p-3 text-sm"><PhaseMovementSummary movements={phases[currentRecordingPhaseIndex]?.movements || []} isPermissive={phases[currentRecordingPhaseIndex]?.isPermissive} /></div>
-                <button onClick={handleRecordAndNext} className="soft-button min-h-16 w-full rounded-2xl bg-green-500 px-4 text-lg font-black text-white hover:bg-green-600">{currentRecordingPhaseIndex + 1}번 기록 · {currentRecordingPhaseIndex + 1 < phases.length ? `P${currentRecordingPhaseIndex + 2}로 이동` : '기록 완료'}</button>
+                <button onClick={handleRecordAndNext} className="soft-button min-h-16 w-full rounded-2xl bg-green-500 px-4 text-lg font-black text-white hover:bg-green-600">{currentRecordingPhaseIndex + 1 < phases.length ? '기록 후 다음' : '기록 완료'}</button>
             </div>}
 
             {!isRecordModeActive && <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-3xl rounded-[1.4rem] border border-white/70 dark:border-white/10 bg-white/80 dark:bg-[#151922]/92 p-2 shadow-[0_16px_45px_rgba(30,64,175,0.24)] backdrop-blur-xl">
                 <div className="mb-1 flex items-center justify-between px-2 text-[11px] text-gray-600 dark:text-gray-300">
                     <span className={`font-bold ${getIntersectionStatus({ ...details, location: mapCenter, phases }) === '조사완료' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300'}`}>{getIntersectionStatus({ ...details, location: mapCenter, phases })}</span>
-                    <span>{fullSaveState === 'saving' ? '서버에 저장 중' : fullSaveState === 'offline' ? '기기 저장 · 서버 전송 대기' : fullSaveState === 'error' ? '저장 실패 · 다시 시도' : `서버 저장 ${formatSavedAt(lastSavedAt)}`}</span>
+                    <span>{fullSaveState === 'saving' ? '서버에 저장 중' : fullSaveState === 'offline' ? '전송 대기' : fullSaveState === 'error' ? '저장 실패 · 다시 시도' : lastSavedAt ? `마지막 저장 ${formatSavedAt(lastSavedAt)}` : '저장 기록 없음'}</span>
                 </div>
                 <button onClick={handleSaveAll} disabled={isSaving || isLocationSaving} className="soft-button w-full flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-3 px-4 hover:bg-indigo-700 disabled:bg-gray-400">
                     <Save size={20} />
-                    {isSaving ? '저장 중...' : isDirty ? '모든 변경사항 저장 · 변경됨' : '모든 변경사항 저장'}
+                    {isSaving ? '저장 중...' : isDirty ? '변경사항 저장' : '저장'}
                 </button>
             </div>}
         </div>
@@ -1992,7 +1992,7 @@ export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/60 dark:border-white/10">
                 <div>
                     <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2"><MapPin size={18} className="text-blue-600" /> 교차로 위치 지도</h2>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">번호 표지를 누르면 이동합니다. 초록은 조사완료, 주황은 조사필요입니다.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">지도에서 번호를 누르면 교차로 상세 화면이 열립니다. 초록은 조사 완료, 주황은 조사 필요입니다.</p>
                 </div>
                 <span className="flex-shrink-0 rounded-full bg-blue-100 dark:bg-blue-400/15 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">위치 {locatedIntersections.length}/{intersections.length}</span>
             </div>
@@ -2002,7 +2002,7 @@ export const ProjectIntersectionMap = ({ intersections, onSelect }) => {
                 <div className="h-40 flex flex-col items-center justify-center gap-2 px-6 text-center bg-white/35 dark:bg-white/[0.03] text-gray-500 dark:text-gray-400">
                     <MapPin size={26} className="text-gray-400" />
                     <p className="text-sm font-medium">저장된 교차로 위치가 없습니다.</p>
-                    <p className="text-xs">교차로 상세 화면에서 위치를 저장하면 이 지도에 번호로 표시됩니다.</p>
+                    <p className="text-xs">교차로 위치를 저장하면 지도에 번호가 표시됩니다.</p>
                 </div>
             )}
         </section>
@@ -2098,7 +2098,6 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
                     <div className="h-12 w-12" aria-hidden="true" />
                 </div>
                 <h1 className="mt-2 text-center text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">교차로 목록</h1>
-                <p className="mt-1 text-center text-sm text-gray-600 dark:text-gray-400">조사할 교차로를 선택하거나 추가하세요.</p>
             </header>
             <ProjectIntersectionMap intersections={intersections} onSelect={onSelect} />
             <div className="mb-4">
@@ -2109,7 +2108,7 @@ export const IntersectionList = ({ intersections, onSelect, onAdd, onDelete, onE
             <div className="content-surface overflow-hidden">
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {intersections.length === 0 ? (
-                        <li className="p-6 text-center text-gray-500 dark:text-gray-400">'교차로 추가' 버튼을 눌러 첫 교차로를 등록하세요.</li>
+                        <li className="p-6 text-center text-gray-500 dark:text-gray-400">등록된 교차로가 없습니다.</li>
                     ) : (
                         intersections.map(intersection => (
                             <li key={intersection.id} className="relative overflow-hidden">
@@ -2240,17 +2239,16 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">프로젝트</h1>
                     <div className="h-12 w-12" aria-hidden="true" />
                 </div>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 sm:text-base">프로젝트를 선택하거나 새로 만드세요.</p>
             </header>
             <div className="mb-4">
                 <button onClick={onAdd} className="soft-button flex items-center justify-center gap-2 w-full sm:w-auto bg-blue-600 text-white font-semibold py-2.5 px-5 hover:bg-blue-700">
-                    <Plus size={20} /> 새 프로젝트 추가
+                    <Plus size={20} /> 프로젝트 추가
                 </button>
             </div>
             <div className="content-surface overflow-hidden">
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {projects.length === 0 ? (
-                        <li className="p-6 text-center text-gray-500 dark:text-gray-400">'새 프로젝트 추가' 버튼을 눌러 시작하세요.</li>
+                        <li className="p-6 text-center text-gray-500 dark:text-gray-400">등록된 프로젝트가 없습니다.</li>
                     ) : (
                         projects.map((project, index) => (
                             <li key={project.id} className="relative overflow-hidden">
@@ -2287,7 +2285,7 @@ export const ProjectList = ({ projects, onSelect, onAdd, onDelete, onEdit, onMov
                                                     <Folder size={24} className="text-blue-500 flex-shrink-0" />
                                                     <div className="min-w-0 flex-grow">
                                                         <OverflowingName className="text-lg font-semibold text-gray-800 dark:text-gray-200">{project.name}</OverflowingName>
-                                                        <p className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">생성일: {project.createdAt?.toDate ? new Date(project.createdAt.toDate()).toLocaleDateString() : '날짜 정보 없음'}</p>
+                                                        <p className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">생성일: {project.createdAt?.toDate ? new Date(project.createdAt.toDate()).toLocaleDateString() : '—'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-shrink-0 items-center gap-1">
@@ -2415,7 +2413,7 @@ export default function App() {
             setLogLevel(process.env.NODE_ENV === 'development' ? 'warn' : 'error');
         } catch (e) {
             console.error("Firebase Initialization Error:", e);
-            setError('앱 초기화 실패: ' + e.message);
+            setError('앱을 열 수 없습니다. 페이지를 새로고침하세요.');
             setLoading(false);
         }
     }, []);
@@ -2434,7 +2432,7 @@ export default function App() {
                     }
                 } catch (authError) { 
                     console.error("Authentication Error:", authError);
-                    setError('인증 실패: ' + authError.message); 
+                    setError('접속을 확인할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 열어 주세요.');
                 }
             }
             setLoading(false);
@@ -2453,7 +2451,7 @@ export default function App() {
             setProjects(data);
         }, (err) => {
             console.error("Firestore Projects Error:", err);
-            setError('프로젝트 로딩 실패: ' + err.message);
+            setError('프로젝트를 불러오지 못했습니다. 페이지를 새로고침하세요.');
         });
         return () => unsubscribe();
     }, [db, userId]);
@@ -2471,7 +2469,7 @@ export default function App() {
             setIntersections(data);
         }, (err) => {
             console.error("Firestore Intersections Error:", err);
-            setError('교차로 로딩 실패: ' + err.message);
+            setError('교차로 목록을 불러오지 못했습니다. 페이지를 새로고침하세요.');
         });
         return () => unsubscribe();
     }, [db, userId, selectedProjectId]);
@@ -2547,7 +2545,7 @@ export default function App() {
         if (skipConfirm) {
             await deleteLogic();
         } else {
-            showConfirm('정말로 이 프로젝트를 삭제하시겠습니까? 모든 교차로 데이터가 영구적으로 삭제됩니다.', deleteLogic, null, () => {});
+            showConfirm('이 프로젝트와 소속 교차로를 모두 삭제할까요?', deleteLogic, null, () => {});
         }
     }, [db, userId, selectedProjectId, backToProjects]);
 
@@ -2573,7 +2571,7 @@ export default function App() {
 
     const handleDeleteIntersection = async (id) => {
         if (!db || !userId || !selectedProjectId) return;
-        showConfirm('정말로 이 교차로를 삭제하시겠습니까?', async () => {
+        showConfirm('이 교차로를 삭제할까요?', async () => {
             const docPath = `/artifacts/${appId}/users/${userId}/projects/${selectedProjectId}/intersections/${id}`;
             await deleteDoc(doc(db, docPath));
         }, null, () => {});
@@ -2593,11 +2591,11 @@ export default function App() {
     // --- Settings Handlers ---
     const handleResetApp = useCallback(() => {
         if (!db || !userId || !projects) return;
-        showConfirm('앱의 모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.', async () => {
+        showConfirm('모든 프로젝트와 조사 기록을 삭제할까요? 삭제 후에는 복구할 수 없습니다.', async () => {
             for (const project of projects) {
                 await handleDeleteProject(project.id, true); // Pass true to skip confirmation
             }
-            showAlert('모든 데이터가 초기화되었습니다.');
+            showAlert('모든 조사 자료를 삭제했습니다.');
         }, null, () => {});
     }, [db, userId, projects, handleDeleteProject]);
 
@@ -2645,7 +2643,7 @@ export default function App() {
     }, [view, backToIntersections, backToProjects]);
 
     // --- Render Logic ---
-    if (loading) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 dark:text-gray-300">Loading...</div>;
+    if (loading) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 dark:text-gray-300">앱을 불러오는 중…</div>;
     if (error) return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900 text-red-500">{error}</div>;
     
     return (
@@ -2680,7 +2678,7 @@ export default function App() {
                     localStorage.setItem('timerVibration', String(next));
                     if (next) {
                         const worked = triggerWebVibration();
-                        showToast(worked ? '시험 진동을 실행했습니다.' : '진동을 실행할 수 없습니다.', worked ? 'success' : 'error');
+                        showToast(worked ? '진동을 보냈습니다.' : '진동을 실행할 수 없습니다.', worked ? 'success' : 'error');
                     }
                     return next;
                 })}
@@ -2691,7 +2689,7 @@ export default function App() {
                 })}
                 onTestSound={() => {
                     const worked = playFeedbackTone();
-                    showToast(worked ? '시험 효과음을 재생했습니다.' : '이 기기에서 효과음을 재생할 수 없습니다.', worked ? 'success' : 'error');
+                    showToast(worked ? '효과음을 재생했습니다.' : '이 기기에서 효과음을 재생할 수 없습니다.', worked ? 'success' : 'error');
                 }}
                 onCopyDiagnostics={async () => {
                     const diagnostics = [
@@ -2729,8 +2727,8 @@ export default function App() {
                     <Settings size={24} />
                 </button>
             </div>
-            {!isOnline && <div className="app-floating-status fixed left-1/2 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인 · 기기에 임시 저장</div>}
-            {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전을 사용할 수 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
+            {!isOnline && <div className="app-floating-status fixed left-1/2 z-40 -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg" role="status">오프라인</div>}
+            {updateRegistration && <div className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl" role="status"><span>새 버전이 있습니다.</span><button onClick={handleApplyUpdate} className="min-h-11 rounded-xl bg-white px-3 font-bold text-slate-900">업데이트</button></div>}
 
             <main key={view} className={`app-view app-view--${viewMotion} pb-20`}>
                 {view === 'projects' && (
